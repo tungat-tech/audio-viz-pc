@@ -2,6 +2,7 @@
 
 #include "audio/AudioFrame.hpp"
 #include "audio/Fft512.hpp"
+#include "audio/WaveformHistory.hpp"
 #include <array>
 #include <cstdint>
 #include <mutex>
@@ -15,6 +16,7 @@ public:
     explicit AudioProcessor(float sampleRate = 48000.0f);
     void processInterleaved(const float* stereo, std::uint32_t frameCount);
     AudioFrame snapshot() const;
+    WaveformHistory waveformHistory() const;
 
 private:
     void processBlock();
@@ -31,6 +33,7 @@ private:
     float displayReference_ = 0.05f;
     float waveformReference_ = 0.08f;
     std::uint32_t generation_ = 0;
+    WaveformHistoryBuffer waveformHistory_;
     mutable std::mutex mutex_;
     AudioFrame latest_{};
 };

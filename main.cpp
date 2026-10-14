@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (options.help) {
-        std::cout << "AudioViz_PC [--demo] [--mode 1|2|3] [--frames N]"
+        std::cout << "AudioViz_PC [--demo] [--mode 1|2|3] [--style 0..6] [--frames N]"
                      " [--screenshot FILE.bmp]"
                      " [--audio-device NAME] [--list-audio-devices]\n"
                      "N is nonnegative; 0 runs until the window is closed.\n"
@@ -63,6 +63,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     for (int mode = 1; mode < options.initialMode; ++mode) interface.nextMode();
+    interface.setSpectrumStyle(static_cast<ui::VisualizerUi::SpectrumStyle>(options.initialStyle));
     bool captureStarted = false;
     bool captureRunning = false;
     if (options.demo) {
@@ -105,7 +106,8 @@ int main(int argc, char** argv) {
             }
         }
         simulator.tick(elapsed);
-        interface.render(processor.snapshot());
+        const auto waveformHistory = processor.waveformHistory();
+        interface.render(processor.snapshot(), &waveformHistory);
         lv_timer_handler();
         simulator.present();
         if (options.frameLimit > 0 && ++renderedFrames >= options.frameLimit) {

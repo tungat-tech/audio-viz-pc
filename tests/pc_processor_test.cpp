@@ -23,6 +23,15 @@ int main() {
     char* invalid[] = {name, serial, port};
     require(!app::parseOptions(3, invalid, options, error),
             "Public app unexpectedly accepts a device-link option");
+    char style[] = "--style";
+    char prism[] = "4";
+    char* selectStyle[] = {name, style, prism};
+    require(app::parseOptions(3, selectStyle, options, error) && options.initialStyle == 4,
+            "Prism style selection failed");
+    char invalidStyle[] = "7";
+    char* rejectStyle[] = {name, style, invalidStyle};
+    require(!app::parseOptions(3, rejectStyle, options, error),
+            "Out-of-range style was accepted");
 
     audio::AudioProcessor processor;
     app::DemoSignal demo;

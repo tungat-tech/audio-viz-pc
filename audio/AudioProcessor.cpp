@@ -100,12 +100,18 @@ void AudioProcessor::processBlock() {
     frame.leftClip = clipHold_[0] > 0;
     frame.rightClip = clipHold_[1] > 0;
     std::lock_guard<std::mutex> lock(mutex_);
+    waveformHistory_.append(frame, sampleRate_);
     latest_ = frame;
 }
 
 AudioFrame AudioProcessor::snapshot() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return latest_;
+}
+
+WaveformHistory AudioProcessor::waveformHistory() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return waveformHistory_.snapshot();
 }
 
 } // namespace audio

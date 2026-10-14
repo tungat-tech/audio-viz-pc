@@ -37,11 +37,17 @@ AudioViz_PC.exe
 AudioViz_PC.exe --demo
 AudioViz_PC.exe --list-audio-devices
 AudioViz_PC.exe --audio-device "device name"
+AudioViz_PC.exe --demo --mode 2 --style 3
 ```
 
 Press **Space** or click **MODE** to change view. In Spectrum, click **STYLE**
-to cycle styles. `--demo` is a synthetic signal for UI testing; live capture
-uses the playback device. `--screenshot output.bmp --frames 60` exits after
+to cycle styles. The Spectrum styles are Bars, Trace, Dots, Pulse, Prism,
+Mirror and Waveform (`--style 0` through `--style 6`, respectively). Bars uses
+discrete columns, Pulse a continuous two-sided energy ribbon, and Prism
+faceted frequency shards. [Bars](previews/spectrum-bars.png),
+[Pulse](previews/spectrum-pulse.png) and [Prism](previews/spectrum-prism.png)
+are screenshots from the same demo signal. `--demo` is a synthetic signal for UI
+testing; live capture uses the playback device. `--screenshot output.bmp --frames 60` exits after
 60 display frames and saves a screenshot.
 
 The current viewer uses SDL2/LVGL. A native Windows application shell is a

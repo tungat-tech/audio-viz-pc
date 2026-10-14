@@ -558,6 +558,56 @@ void VisualizerUi::drawSpectrum(const audio::AudioFrame& frame, bool full) {
         peakHeights_[i] = peak;
     }
 }
+void VisualizerUi::drawPulseRibbon() {
+    // A single connected energy ribbon, deliberately unlike the discrete
+    // columns of Bars/Mirror or the thin contour of Trace.
+    constexpr int center = 127;
+    const auto palette = conceptColors(SpectrumStyle::NeonPulse);
+    line(17, center, 303, center, rgb(69, 118, 144));
+    for (int x = 17; x <= 303; ++x) {
+        const int position = std::clamp(x - 21, 0, 23 * 12);
+        const int leftBand = std::min(position / 12, 22);
+        const int fraction = position - leftBand * 12;
+        const int level = (barHeights_[leftBand] * (12 - fraction) +
+                           barHeights_[leftBand + 1] * fraction + 6) / 12;
+        const int amplitude = level * 38 / 100;
+        if (!amplitude) continue;
+        rect(x, center - amplitude - 3, 1, amplitude * 2 + 7, rgb(28, 48, 89));
+        rect(x, center - amplitude, 1, amplitude * 2 + 1, rgb(42, 119, 154));
+        const int core = std::max(1, amplitude / 4);
+        rect(x, center - core, 1, core * 2 + 1, palette.accent);
+        pixel(x, center - amplitude, palette.peak);
+        pixel(x, center + amplitude, palette.peak);
+    }
+    for (std::size_t i = 0; i < audio::kBandCount; ++i) {
+        const int x = 21 + static_cast<int>(i) * 12;
+        const int y = center - peakHeights_[i] * 40 / 100 - 5;
+        rect(x - 1, y, 3, 2, palette.peak);
+    }
+}
+
+void VisualizerUi::drawPrismShard(std::size_t band) {
+    // Each frequency gets a faceted crystal with a pointed top and tapered
+    // base. Two colored faces make this legible even on the RGB332 panel.
+    const auto palette = conceptColors(SpectrumStyle::Prism);
+    const int cx = 21 + static_cast<int>(band) * 12;
+    const int height = barHeights_[band] * 96 / 100;
+    for (int row = 0; row < height; ++row) {
+        const int third = std::max(1, height / 3);
+        const int tail = std::max(1, height / 4);
+        const int halfWidth = row < third ? 1 + row * 3 / third :
+            row < height - tail ? 4 : 4 - (row - (height - tail)) * 2 / tail;
+        const int y = 178 - height + row;
+        rect(cx - halfWidth, y, halfWidth, 1, palette.accent);
+        rect(cx, y, halfWidth + 1, 1, palette.secondary);
+        pixel(cx, y, rgb(204, 238, 249));
+    }
+    const int peakY = 174 - peakHeights_[band] * 96 / 100;
+    pixel(cx, peakY - 1, palette.peak);
+    line(cx - 1, peakY, cx + 1, peakY, palette.peak);
+    pixel(cx, peakY + 1, palette.peak);
+}
+
 void VisualizerUi::drawConceptSpectrum(const audio::AudioFrame& frame, bool full) {
     const auto style = spectrumStyle_;
     const auto palette = conceptColors(style);
@@ -576,36 +626,61 @@ void VisualizerUi::drawConceptSpectrum(const audio::AudioFrame& frame, bool full
     if (!changed) return;
     clipArea_ = {8, 51, 311, 197};
     drawSpectrumBase();
-    const bool mirror = style == SpectrumStyle::Mirror;
-    const int base = mirror ? 124 : 178;
-    const int factor = mirror ? 55 : 99;
-    if (mirror) line(16, base, 303, base, palette.secondary);
-    for (std::size_t i = 0; i < audio::kBandCount; ++i) {
-        const int x = 17 + static_cast<int>(i) * 12;
-        const int height = barHeights_[i] * factor / 100;
-        const int peak = peakHeights_[i] * factor / 100;
-        if (height > 0) {
-            rect(x, base - height, 8, height,
-                 style == SpectrumStyle::Prism && i % 3 == 1 ? palette.secondary : palette.accent);
-            if (mirror) rect(x, base, 8, height * 2 / 3, palette.secondary);
-            else rect(x, base - height, 8, std::min(height, 6), palette.secondary);
+    if (style == SpectrumStyle::NeonPulse) drawPulseRibbon();
+    else if (style == SpectrumStyle::Prism) {
+        for (std::size_t i = 0; i < audio::kBandCount; ++i) drawPrismShard(i);
+    } else {
+        constexpr int base = 124;
+        line(16, base, 303, base, palette.secondary);
+        for (std::size_t i = 0; i < audio::kBandCount; ++i) {
+            const int x = 17 + static_cast<int>(i) * 12;
+            const int height = barHeights_[i] * 55 / 100;
+            const int peak = peakHeights_[i] * 55 / 100;
+            if (height > 0) {
+                rect(x, base - height, 8, height, palette.accent);
+                rect(x, base, 8, height * 2 / 3, palette.secondary);
+            }
+            rect(x, base - peak - 4, 8, 2, palette.peak);
         }
-        rect(x, base - peak - 4, 8, 2, palette.peak);
     }
     if (!full) {
-        // Redraw only the columns whose height or peak changed.
+        if (style == SpectrumStyle::NeonPulse) {
+            // A changed band affects both neighboring ribbon segments. Send
+            // non-overlapping <=24x95 tiles; each fits the 2560-pixel DMA buffer.
+            for (int left = 17; left <= 303; left += 24) {
+                const int right = std::min(left + 23, 303);
+                bool dirty = false;
+                for (std::size_t i = 0; i < audio::kBandCount; ++i) {
+                    const int center = 21 + static_cast<int>(i) * 12;
+                    dirty |= dirtyBands[i] && center >= left - 12 && center <= right + 12;
+                }
+                if (dirty) invalidate({static_cast<lv_coord_t>(left), 79,
+                                       static_cast<lv_coord_t>(right), 173});
+            }
+            return;
+        }
         for (std::size_t i = 0; i < audio::kBandCount; ++i) {
             if (!dirtyBands[i]) continue;
-            const int oldHeight = previousHeights[i] * factor / 100;
-            const int newHeight = barHeights_[i] * factor / 100;
-            const int oldPeak = previousPeaks[i] * factor / 100;
-            const int newPeak = peakHeights_[i] * factor / 100;
-            const int top = std::min({base - oldHeight, base - newHeight,
-                                      base - oldPeak - 4, base - newPeak - 4});
-            const int bottom = mirror ? base + std::max(oldHeight, newHeight) * 2 / 3 : base;
             const int x = 17 + static_cast<int>(i) * 12;
-            invalidate({static_cast<lv_coord_t>(x), static_cast<lv_coord_t>(top),
-                        static_cast<lv_coord_t>(x + 7), static_cast<lv_coord_t>(bottom)});
+            if (style == SpectrumStyle::Prism) {
+                const int top = std::max(77, std::min({178 - previousHeights[i] * 96 / 100,
+                    178 - barHeights_[i] * 96 / 100,
+                    173 - previousPeaks[i] * 96 / 100,
+                    173 - peakHeights_[i] * 96 / 100}));
+                invalidate({static_cast<lv_coord_t>(x), static_cast<lv_coord_t>(top),
+                            static_cast<lv_coord_t>(x + 8), 178});
+            } else {
+                constexpr int base = 124;
+                const int oldHeight = previousHeights[i] * 55 / 100;
+                const int newHeight = barHeights_[i] * 55 / 100;
+                const int oldPeak = previousPeaks[i] * 55 / 100;
+                const int newPeak = peakHeights_[i] * 55 / 100;
+                const int top = std::min({base - oldHeight, base - newHeight,
+                                          base - oldPeak - 4, base - newPeak - 4});
+                const int bottom = base + std::max(oldHeight, newHeight) * 2 / 3;
+                invalidate({static_cast<lv_coord_t>(x), static_cast<lv_coord_t>(top),
+                            static_cast<lv_coord_t>(x + 7), static_cast<lv_coord_t>(bottom)});
+            }
         }
     }
 }
@@ -632,48 +707,52 @@ void VisualizerUi::drawWaveformColumn(int x) {
     }
 }
 void VisualizerUi::drawWaveform(const audio::AudioFrame& frame, bool full) {
-    const bool changed = !waveformSourceValid_ ||
-        waveformLastGeneration_ != frame.generation ||
-        waveformLastHasAudio_ != frame.hasAudio ||
-        waveformLastActivity_ != frame.visualActivity ||
-        waveformLastScale_ != frame.scopeScale ||
-        waveformLastLeft_ != frame.leftWave || waveformLastRight_ != frame.rightWave;
+    const bool changed = waveformExternalHistory_ ?
+        (!waveformSourceValid_ ||
+         waveformLastHistorySequence_ != waveformExternalHistory_->sequence) :
+        (!waveformSourceValid_ || waveformLastGeneration_ != frame.generation ||
+         waveformLastHasAudio_ != frame.hasAudio ||
+         waveformLastActivity_ != frame.visualActivity ||
+         waveformLastScale_ != frame.scopeScale ||
+         waveformLastLeft_ != frame.leftWave || waveformLastRight_ != frame.rightWave);
     std::array<std::uint8_t, kWaveformColumns> previousPeak{};
     std::array<std::uint8_t, kWaveformColumns> previousRms{};
     if (changed) {
-        float peak = 0.0f, sumSquares = 0.0f;
-        for (std::size_t i = 0; i < audio::kWavePoints; ++i) {
-            const float sample = std::max(std::abs(frame.leftWave[i]),
-                                          std::abs(frame.rightWave[i]));
-            peak = std::max(peak, sample);
-            sumSquares += sample * sample;
-        }
-        const float rms = std::sqrt(sumSquares / static_cast<float>(audio::kWavePoints));
-        // The live stereo gain already targets a comfortable 27-pixel peak.
-        // Synthetic frames use a fixed scale for distinct loud/quiet passages.
-        const float scale = frame.scopeScale[0] >= 0.0f || frame.scopeScale[1] >= 0.0f ?
-            std::max(frame.scopeScale[0], frame.scopeScale[1]) : 48.0f;
-        // scopeScale already includes the DSP activity gate; do not apply it
-        // twice. Only the synthetic fallback needs an explicit activity gate.
-        const float activity = !frame.hasAudio ? 0.0f :
-            frame.scopeScale[0] >= 0.0f || frame.scopeScale[1] >= 0.0f ?
-            1.0f : std::clamp(frame.visualActivity, 0.0f, 1.0f);
-        const int peakPixels = std::clamp(static_cast<int>(std::round(peak * scale * activity)), 0, 48);
-        const int rmsPixels = std::clamp(static_cast<int>(std::round(rms * scale * activity)), 0, peakPixels);
         previousPeak = waveformPeak_;
         previousRms = waveformRms_;
-        // Chronological timeline: old samples slide left and the newest
-        // envelope enters at the right edge. There is no wraparound seam.
-        std::move(waveformPeak_.begin() + 1, waveformPeak_.end(), waveformPeak_.begin());
-        std::move(waveformRms_.begin() + 1, waveformRms_.end(), waveformRms_.begin());
-        waveformPeak_.back() = static_cast<std::uint8_t>(peakPixels);
-        waveformRms_.back() = static_cast<std::uint8_t>(rmsPixels);
-        waveformLastLeft_ = frame.leftWave;
-        waveformLastRight_ = frame.rightWave;
-        waveformLastScale_ = frame.scopeScale;
-        waveformLastActivity_ = frame.visualActivity;
-        waveformLastGeneration_ = frame.generation;
-        waveformLastHasAudio_ = frame.hasAudio;
+        if (waveformExternalHistory_) {
+            static_assert(kWaveformColumns == audio::kWaveformHistoryColumns,
+                          "Desktop history must match the waveform plot width");
+            waveformPeak_ = waveformExternalHistory_->peak;
+            waveformRms_ = waveformExternalHistory_->rms;
+            waveformLastHistorySequence_ = waveformExternalHistory_->sequence;
+        } else {
+            float peak = 0.0f, sumSquares = 0.0f;
+            for (std::size_t i = 0; i < audio::kWavePoints; ++i) {
+                const float sample = std::max(std::abs(frame.leftWave[i]),
+                                              std::abs(frame.rightWave[i]));
+                peak = std::max(peak, sample);
+                sumSquares += sample * sample;
+            }
+            const float rms = std::sqrt(sumSquares / static_cast<float>(audio::kWavePoints));
+            const float scale = frame.scopeScale[0] >= 0.0f || frame.scopeScale[1] >= 0.0f ?
+                std::max(frame.scopeScale[0], frame.scopeScale[1]) : 48.0f;
+            const float activity = !frame.hasAudio ? 0.0f :
+                frame.scopeScale[0] >= 0.0f || frame.scopeScale[1] >= 0.0f ?
+                1.0f : std::clamp(frame.visualActivity, 0.0f, 1.0f);
+            const int peakPixels = std::clamp(static_cast<int>(std::round(peak * scale * activity)), 0, 48);
+            const int rmsPixels = std::clamp(static_cast<int>(std::round(rms * scale * activity)), 0, peakPixels);
+            std::move(waveformPeak_.begin() + 1, waveformPeak_.end(), waveformPeak_.begin());
+            std::move(waveformRms_.begin() + 1, waveformRms_.end(), waveformRms_.begin());
+            waveformPeak_.back() = static_cast<std::uint8_t>(peakPixels);
+            waveformRms_.back() = static_cast<std::uint8_t>(rmsPixels);
+            waveformLastLeft_ = frame.leftWave;
+            waveformLastRight_ = frame.rightWave;
+            waveformLastScale_ = frame.scopeScale;
+            waveformLastActivity_ = frame.visualActivity;
+            waveformLastGeneration_ = frame.generation;
+            waveformLastHasAudio_ = frame.hasAudio;
+        }
         waveformSourceValid_ = true;
     }
     if (full) {
@@ -766,8 +845,10 @@ void VisualizerUi::drawScope(const audio::AudioFrame& frame, bool full) {
         if (!full) invalidate(clipArea_);
     }
 }
-void VisualizerUi::render(const audio::AudioFrame& frame) {
+void VisualizerUi::render(const audio::AudioFrame& frame,
+                          const audio::WaveformHistory* waveformHistory) {
     if (!ready()) return;
+    waveformExternalHistory_ = waveformHistory;
     const bool full = modeChanged_;
     clipArea_ = {0, 0, kWidth - 1, kHeight - 1};
     if (full) {
@@ -787,5 +868,6 @@ void VisualizerUi::render(const audio::AudioFrame& frame) {
     }
     shellDrawn_ = true;
     modeChanged_ = false;
+    waveformExternalHistory_ = nullptr;
 }
 } // namespace ui

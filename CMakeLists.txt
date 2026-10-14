@@ -24,6 +24,10 @@ target_link_libraries(audio_dsp PUBLIC Threads::Threads)
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(waveform_history_test tests/waveform_history_test.cpp)
+    target_include_directories(waveform_history_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    add_test(NAME waveform_history_test COMMAND waveform_history_test)
+
     add_executable(pc_processor_test tests/pc_processor_test.cpp)
     target_link_libraries(pc_processor_test PRIVATE audio_dsp)
     add_test(NAME pc_processor_test COMMAND pc_processor_test)

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio/AudioFrame.hpp"
+#include "audio/WaveformHistory.hpp"
 #include <lvgl.h>
 #include <array>
 #include <cstddef>
@@ -38,7 +39,8 @@ public:
     void setSpectrumStyle(SpectrumStyle style);
     SpectrumStyle spectrumStyle() const { return spectrumStyle_; }
     void setStatus(const std::string& status);
-    void render(const audio::AudioFrame& frame);
+    void render(const audio::AudioFrame& frame,
+                const audio::WaveformHistory* waveformHistory = nullptr);
 
 private:
     enum class Mode { Vu = 0, Spectrum = 1, Scope = 2 };
@@ -69,6 +71,8 @@ private:
     void drawSpectrumTrace();
     void drawSpectrum(const audio::AudioFrame& frame, bool full);
     void drawConceptSpectrum(const audio::AudioFrame& frame, bool full);
+    void drawPulseRibbon();
+    void drawPrismShard(std::size_t band);
     void drawWaveform(const audio::AudioFrame& frame, bool full);
     void drawWaveformColumn(int x);
     void resetWaveform();
@@ -112,6 +116,8 @@ private:
     std::uint32_t waveformLastGeneration_ = 0;
     bool waveformLastHasAudio_ = false;
     bool waveformSourceValid_ = false;
+    const audio::WaveformHistory* waveformExternalHistory_ = nullptr;
+    std::uint64_t waveformLastHistorySequence_ = 0;
 };
 
 } // namespace ui
