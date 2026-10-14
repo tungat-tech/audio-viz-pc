@@ -93,6 +93,10 @@ target_link_libraries(visualizer_ui PUBLIC lvgl audio_dsp)
 add_executable(AudioViz_PC main.cpp)
 target_link_libraries(AudioViz_PC PRIVATE
     audio_capture visualizer_ui simulator)
+if(MINGW)
+    # Ship one viewer executable instead of depending on MinGW runtime DLLs.
+    target_link_options(AudioViz_PC PRIVATE -static -static-libgcc -static-libstdc++)
+endif()
 
 if(BUILD_TESTING AND BUILD_PORTABLE_DEMO)
     add_executable(audio_capture_demo_test tests/audio_capture_demo_test.cpp)
