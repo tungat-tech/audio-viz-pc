@@ -91,8 +91,10 @@ target_include_directories(visualizer_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(visualizer_ui PUBLIC lvgl audio_dsp)
 
 if(WIN32)
+    enable_language(RC)
     # A GUI subsystem prevents Windows from opening a console beside the app.
-    add_executable(AudioViz_PC WIN32 main.cpp)
+    add_executable(AudioViz_PC WIN32 main.cpp branding/AudioViz.rc)
+    target_include_directories(AudioViz_PC PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/branding)
     target_link_libraries(AudioViz_PC PRIVATE SDL2::SDL2main)
 else()
     add_executable(AudioViz_PC main.cpp)
