@@ -1,17 +1,15 @@
 $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 
-cmake -S . -B build -A x64 -DBUILD_TESTING=ON
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -DBUILD_TESTING=ON -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
 if ($LASTEXITCODE -ne 0) { throw "CMake configure failed" }
 
-cmake --build build --config Release --target AudioViz_PC pc_processor_test
+cmake --build build --config Release --parallel
 if ($LASTEXITCODE -ne 0) { throw "Windows build failed" }
 
-ctest --test-dir build -C Release --output-on-failure -R pc_processor_test
+ctest --test-dir build -C Release --output-on-failure
 if ($LASTEXITCODE -ne 0) { throw "Windows test failed" }
 
-$app = Get-ChildItem -Path build -Recurse -Filter AudioViz_PC.exe |
-    Where-Object { $_.FullName -match "Release" } |
-    Select-Object -First 1
-if (-not $app) { throw "AudioViz_PC.exe not found under build" }
-Write-Host "Ready: $($app.FullName)"
+$app = Join-Path $PSScriptRoot "build/Release/AudioViz_PC.exe"
+if (-not (Test-Path $app)) { throw "AudioViz_PC.exe not found under build/Release" }
+Write-Host "Ready: $app"

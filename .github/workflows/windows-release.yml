@@ -1,0 +1,72 @@
+name: Windows build and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Build and test (MSVC x64)
+        shell: pwsh
+        run: ./build_windows.ps1
+
+      - name: Package executable and licenses
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force dist/package | Out-Null
+          Copy-Item build/Release/AudioViz_PC.exe dist/package/
+          Copy-Item README.md,LICENSE,THIRD_PARTY.md dist/package/
+          Copy-Item licenses dist/package/licenses -Recurse
+          Compress-Archive -Path dist/package/* -DestinationPath dist/AudioViz-PC-Windows-x64.zip
+          $hash = (Get-FileHash dist/AudioViz-PC-Windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  AudioViz-PC-Windows-x64.zip" | Set-Content dist/SHA256SUMS.txt
+
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: audioviz-pc-windows-x64
+          path: |
+            dist/AudioViz-PC-Windows-x64.zip
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download tested Windows package
+        uses: actions/download-artifact@v4
+        with:
+          name: audioviz-pc-windows-x64
+          path: dist
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            dist/AudioViz-PC-Windows-x64.zip dist/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "AudioViz PC $RELEASE_TAG" \
+            --generate-notes
