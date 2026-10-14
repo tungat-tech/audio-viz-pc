@@ -1,0 +1,10 @@
+/build/
+/build-*/
+/.vs/
+/out/
+*.user
+*.suo
+*.bmp
+*.exe
+*.dll
+*.zip
