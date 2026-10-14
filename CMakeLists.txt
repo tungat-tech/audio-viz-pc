@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(AudioViz_PC VERSION 0.1 LANGUAGES C CXX)
+project(AudioViz_PC VERSION 0.0.1 LANGUAGES C CXX)
 
 # Some pinned dependencies declare policy versions older than CMake 4 accepts.
 if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0" AND NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)

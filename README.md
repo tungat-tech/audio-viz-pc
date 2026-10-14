@@ -34,18 +34,20 @@ selected generator's build directory).
 
 Every push to `main` and pull request targeting `main` builds and tests on a
 GitHub-hosted Windows 2022 runner. The resulting `audioviz-pc-windows-x64`
-artifact is available from the workflow run for 14 days. It contains a ZIP
-with the executable and license files plus `SHA256SUMS.txt`.
+artifact is available from the workflow run for 14 days. It contains a
+standalone `.exe`, a ZIP with the executable and license files, and
+`SHA256SUMS.txt` for both downloads.
 
 To publish a release, create and push a new `v*` tag on a tested commit:
 
 ```bash
-git tag v0.1.0-beta.1
-git push origin v0.1.0-beta.1
+git tag v0.0.1
+git push origin v0.0.1
 ```
 
-The tag run rebuilds and tests the source on Windows, then publishes the ZIP
-and checksum to GitHub Releases using the repository's `GITHUB_TOKEN`. Local
+The tag run rebuilds and tests the source on Windows, then publishes the
+standalone EXE, ZIP and checksum to GitHub Releases using the repository's
+`GITHUB_TOKEN`. Local
 `gh` login is not needed for this workflow. Tag pushes should be reserved for
 maintainers; pull requests cannot publish a release.
 

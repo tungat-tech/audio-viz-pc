@@ -29,18 +29,22 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Force dist/package | Out-Null
-          Copy-Item build/Release/AudioViz_PC.exe dist/package/
+          Copy-Item build/Release/AudioViz_PC.exe dist/AudioViz-PC-Windows-x64.exe
+          Copy-Item dist/AudioViz-PC-Windows-x64.exe dist/package/AudioViz_PC.exe
           Copy-Item README.md,LICENSE,THIRD_PARTY.md dist/package/
           Copy-Item licenses dist/package/licenses -Recurse
           Compress-Archive -Path dist/package/* -DestinationPath dist/AudioViz-PC-Windows-x64.zip
-          $hash = (Get-FileHash dist/AudioViz-PC-Windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  AudioViz-PC-Windows-x64.zip" | Set-Content dist/SHA256SUMS.txt
+          $exeHash = (Get-FileHash dist/AudioViz-PC-Windows-x64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $zipHash = (Get-FileHash dist/AudioViz-PC-Windows-x64.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          @("$exeHash  AudioViz-PC-Windows-x64.exe", "$zipHash  AudioViz-PC-Windows-x64.zip") |
+            Set-Content dist/SHA256SUMS.txt
 
       - name: Upload test artifact
         uses: actions/upload-artifact@v4
         with:
           name: audioviz-pc-windows-x64
           path: |
+            dist/AudioViz-PC-Windows-x64.exe
             dist/AudioViz-PC-Windows-x64.zip
             dist/SHA256SUMS.txt
           if-no-files-found: error
@@ -65,8 +69,10 @@ jobs:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
           gh release create "$RELEASE_TAG" \
+            dist/AudioViz-PC-Windows-x64.exe \
             dist/AudioViz-PC-Windows-x64.zip dist/SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --title "AudioViz PC $RELEASE_TAG" \
+            --notes "Download the EXE directly, or use the ZIP for the EXE and bundled license notices." \
             --generate-notes
