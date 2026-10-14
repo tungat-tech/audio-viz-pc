@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="AudioViz logo B: waveform ring">
+  <rect width="256" height="256" rx="54" fill="#081a2a"/>
+  <circle cx="128" cy="128" r="88" fill="#10283a" stroke="#294b5e" stroke-width="3"/>
+  <circle cx="128" cy="128" r="66" fill="none" stroke="#6870dc" stroke-width="9" stroke-dasharray="260 160" transform="rotate(-53 128 128)" stroke-linecap="round"/>
+  <path d="M48 128h30l13-28 18 58 22-85 20 103 17-57 11 20h29" fill="none" stroke="#6ae1e6" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="194" cy="70" r="8" fill="#b8fff4"/>
+</svg>

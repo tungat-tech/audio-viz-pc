@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="AudioViz logo A: spectral signal">
+  <rect width="256" height="256" rx="54" fill="#081a2a"/>
+  <rect x="15" y="15" width="226" height="226" rx="42" fill="none" stroke="#284757" stroke-width="2"/>
+  <path d="M46 128h164" stroke="#355b6b" stroke-width="4" stroke-linecap="round"/>
+  <rect x="51" y="105" width="20" height="46" rx="10" fill="#6ae1e6"/>
+  <rect x="83" y="78" width="20" height="100" rx="10" fill="#6ae1e6"/>
+  <rect x="115" y="54" width="20" height="148" rx="10" fill="#6ae1e6"/>
+  <rect x="147" y="87" width="20" height="82" rx="10" fill="#7768ed"/>
+  <rect x="179" y="107" width="20" height="42" rx="10" fill="#6ae1e6"/>
+</svg>

@@ -81,12 +81,19 @@ void AudioProcessor::processBlock() {
         frame.leftWave[i] = left_[at];
         frame.rightWave[i] = right_[at];
     }
+    // One stereo reference avoids boosting the louder channel with the quiet
+    // channel's gain. Attack catches level jumps; slower release preserves the
+    // relative shape of softer passages instead of filling every column.
+    const float stereoPeak = std::max(samplePeak[0], samplePeak[1]);
+    waveformReference_ += (std::max(stereoPeak, 0.008f) - waveformReference_) *
+        (stereoPeak > waveformReference_ ? 0.35f : 0.008f);
+    const float waveformScale = active ? std::min(600.0f,
+        27.0f / std::max(waveformReference_, 0.008f)) : 0.0f;
     for (std::size_t channel = 0; channel < 2; ++channel) {
         meterRms_[channel] += (rms[channel] - meterRms_[channel]) *
             (rms[channel] > meterRms_[channel] ? 0.35f : 0.14f);
         clipHold_[channel] = samplePeak[channel] >= 0.98f ? 12 : std::max(0, clipHold_[channel] - 1);
-        frame.scopeScale[channel] = active ? std::min(240.0f,
-            26.0f / std::max(samplePeak[channel], 0.01f)) : 0.0f;
+        frame.scopeScale[channel] = waveformScale;
     }
     frame.leftDb = dbfs(meterRms_[0]);
     frame.rightDb = dbfs(meterRms_[1]);

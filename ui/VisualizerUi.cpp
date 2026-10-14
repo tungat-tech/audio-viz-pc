@@ -649,10 +649,10 @@ void VisualizerUi::drawWaveform(const audio::AudioFrame& frame, bool full) {
             sumSquares += sample * sample;
         }
         const float rms = std::sqrt(sumSquares / static_cast<float>(audio::kWavePoints));
-        // AudioProcessor supplies a slow adaptive gain. Synthetic frames use a
-        // fixed scale so their loud and quiet passages remain visibly distinct.
+        // The live stereo gain already targets a comfortable 27-pixel peak.
+        // Synthetic frames use a fixed scale for distinct loud/quiet passages.
         const float scale = frame.scopeScale[0] >= 0.0f || frame.scopeScale[1] >= 0.0f ?
-            std::max(frame.scopeScale[0], frame.scopeScale[1]) * (48.0f / 26.0f) : 48.0f;
+            std::max(frame.scopeScale[0], frame.scopeScale[1]) : 48.0f;
         // scopeScale already includes the DSP activity gate; do not apply it
         // twice. Only the synthetic fallback needs an explicit activity gate.
         const float activity = !frame.hasAudio ? 0.0f :

@@ -29,6 +29,7 @@ private:
     std::array<int, 2> clipHold_{};
     std::size_t fill_ = 0;
     float displayReference_ = 0.05f;
+    float waveformReference_ = 0.08f;
     std::uint32_t generation_ = 0;
     mutable std::mutex mutex_;
     AudioFrame latest_{};

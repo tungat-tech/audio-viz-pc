@@ -90,7 +90,13 @@ add_library(visualizer_ui STATIC ui/VisualizerUi.cpp)
 target_include_directories(visualizer_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(visualizer_ui PUBLIC lvgl audio_dsp)
 
-add_executable(AudioViz_PC main.cpp)
+if(WIN32)
+    # A GUI subsystem prevents Windows from opening a console beside the app.
+    add_executable(AudioViz_PC WIN32 main.cpp)
+    target_link_libraries(AudioViz_PC PRIVATE SDL2::SDL2main)
+else()
+    add_executable(AudioViz_PC main.cpp)
+endif()
 target_link_libraries(AudioViz_PC PRIVATE
     audio_capture visualizer_ui simulator)
 if(MINGW)

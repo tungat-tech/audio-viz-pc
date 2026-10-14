@@ -1,4 +1,3 @@
-#define SDL_MAIN_HANDLED
 #include "app/DemoSignal.hpp"
 #include "app/Options.hpp"
 #include "audio/AudioCapture.hpp"

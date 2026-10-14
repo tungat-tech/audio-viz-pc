@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="AudioViz logo C: AV monogram">
+  <rect width="256" height="256" rx="54" fill="#081a2a"/>
+  <rect x="27" y="27" width="202" height="202" rx="32" fill="#0d2436" stroke="#315265" stroke-width="2"/>
+  <path d="M45 174 91 73l45 101" fill="none" stroke="#6ae1e6" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M65 145h54" fill="none" stroke="#b3fcf2" stroke-width="13" stroke-linecap="round"/>
+  <path d="m135 83 32 91 44-101" fill="none" stroke="#7768ed" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
