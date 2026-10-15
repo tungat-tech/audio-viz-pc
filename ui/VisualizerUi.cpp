@@ -5,8 +5,10 @@
 #include <cstdlib>
 #include <cstring>
 
+extern "C" {
 LV_FONT_DECLARE(lv_font_montserrat_vietnamese_12);
 LV_FONT_DECLARE(lv_font_montserrat_vietnamese_14);
+}
 #include <new>
 
 namespace ui {

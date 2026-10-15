@@ -6,8 +6,10 @@
 #include <stdexcept>
 #include <string>
 
+extern "C" {
 LV_FONT_DECLARE(lv_font_montserrat_vietnamese_12);
 LV_FONT_DECLARE(lv_font_montserrat_vietnamese_14);
+}
 
 namespace {
 void requireGlyph(const lv_font_t* font, std::uint32_t codepoint) {
