@@ -31,9 +31,10 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (options.help) {
-        std::cout << "AudioViz_PC [--demo] [--mode 1|2|3] [--style 0..6] [--frames N]"
+        std::cout << "AudioViz_PC [--demo] [--mode 1|2|3] [--style 0..11] [--frames N]"
                      " [--screenshot FILE.bmp]"
                      " [--audio-device NAME] [--list-audio-devices]\n"
+                     "Modes: 1 Spectrum (default), 2 VU, 3 Oscilloscope.\n"
                      "N is nonnegative; 0 runs until the window is closed.\n"
                      "Screenshots are saved on exit.\n";
         return 0;

@@ -14,7 +14,8 @@ namespace ui {
 class VisualizerUi {
 public:
     enum class SpectrumStyle : std::uint8_t {
-        Bars = 0, Trace, Dots, NeonPulse, Prism, Mirror, Waveform, Count
+        Bars = 0, Trace, Dots, NeonPulse, Mirror, Waveform, Halo,
+        Waterfall, Ridgeline, TopoBloom, AuroraWeave, CymaticMesh, Count
     };
     enum class TouchAction : std::uint8_t { NextMode, NextSpectrumStyle };
     using TouchActionHandler = void (*)(void*, TouchAction);
@@ -43,7 +44,7 @@ public:
                 const audio::WaveformHistory* waveformHistory = nullptr);
 
 private:
-    enum class Mode { Vu = 0, Spectrum = 1, Scope = 2 };
+    enum class Mode { Spectrum = 0, Vu = 1, Scope = 2 };
     struct MeterState {
         int tipX = 0;
         int tipY = 0;
@@ -72,10 +73,16 @@ private:
     void drawSpectrum(const audio::AudioFrame& frame, bool full);
     void drawConceptSpectrum(const audio::AudioFrame& frame, bool full);
     void drawPulseRibbon();
-    void drawPrismShard(std::size_t band);
     void drawWaveform(const audio::AudioFrame& frame, bool full);
+    void drawHalo(const audio::AudioFrame& frame, bool full);
+    void drawWaterfall(const audio::AudioFrame& frame, bool full);
+    void drawRidgeline(const audio::AudioFrame& frame, bool full);
+    void drawTopoBloom(const audio::AudioFrame& frame, bool full);
+    void drawAuroraWeave(const audio::AudioFrame& frame, bool full);
+    void drawCymaticMesh(const audio::AudioFrame& frame, bool full);
     void drawWaveformColumn(int x);
     void resetWaveform();
+    void resetSpectrumHistory();
     void drawScopeBase(int channel);
     void drawScopeTrace(int channel);
     void drawScope(const audio::AudioFrame& frame, bool full);
@@ -95,7 +102,7 @@ private:
     lv_obj_t* leftValue_ = nullptr;
     lv_obj_t* rightValue_ = nullptr;
     std::string statusText_ = "STARTING AUDIO";
-    Mode mode_ = Mode::Vu;
+    Mode mode_ = Mode::Spectrum;
     SpectrumStyle spectrumStyle_ = SpectrumStyle::Bars;
     bool shellDrawn_ = false;
     bool modeChanged_ = true;
@@ -118,6 +125,22 @@ private:
     bool waveformSourceValid_ = false;
     const audio::WaveformHistory* waveformExternalHistory_ = nullptr;
     std::uint64_t waveformLastHistorySequence_ = 0;
+    float haloPhase_ = 0.0f;
+    float haloPulse_ = 0.0f;
+    float haloLastBass_ = 0.0f;
+    std::uint32_t haloLastGeneration_ = 0;
+    static constexpr std::size_t kWaterfallRows = 12;
+    static constexpr std::size_t kRidgelineRows = 5;
+    std::array<std::array<std::uint8_t, audio::kBandCount>, kWaterfallRows> waterfall_{};
+    std::array<std::array<std::uint8_t, audio::kBandCount>, kRidgelineRows> ridgeline_{};
+    std::uint32_t waterfallLastGeneration_ = 0;
+    std::uint32_t ridgelineLastGeneration_ = 0;
+    std::uint32_t topoLastGeneration_ = 0;
+    std::uint32_t auroraLastGeneration_ = 0;
+    std::uint32_t cymaticLastGeneration_ = 0;
+    float topoPhase_ = 0.0f;
+    float auroraPhase_ = 0.0f;
+    float cymaticPhase_ = 0.0f;
 };
 
 } // namespace ui

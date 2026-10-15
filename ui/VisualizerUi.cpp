@@ -28,6 +28,36 @@ const lv_color_t kColdPanel = rgb(7, 29, 44);
 const lv_color_t kColdGrid = rgb(39, 76, 91);
 const lv_color_t kCyan = rgb(106, 225, 230);
 const lv_color_t kViolet = rgb(91, 69, 214);
+lv_color_t haloColor(float frequency) {
+    const float t = std::clamp(frequency, 0.0f, 1.0f);
+    const float u = t < 0.5f ? t * 2.0f : (t - 0.5f) * 2.0f;
+    const int r0 = t < 0.5f ? 106 : 75;
+    const int g0 = t < 0.5f ? 225 : 155;
+    const int b0 = t < 0.5f ? 230 : 224;
+    const int r1 = t < 0.5f ? 75 : 143;
+    const int g1 = t < 0.5f ? 155 : 111;
+    const int b1 = t < 0.5f ? 224 : 229;
+    return rgb(static_cast<int>(r0 + (r1 - r0) * u),
+               static_cast<int>(g0 + (g1 - g0) * u),
+               static_cast<int>(b0 + (b1 - b0) * u));
+}
+lv_color_t waterfallColor(std::uint8_t level) {
+    if (level < 10) return rgb(10, 31, 45);
+    if (level < 52) return rgb(67, 54, 137);
+    if (level < 103) return rgb(82, 76, 174);
+    if (level < 154) return rgb(43, 126, 190);
+    if (level < 205) return rgb(72, 187, 213);
+    if (level < 238) return rgb(111, 226, 233);
+    return rgb(201, 248, 250);
+}
+float spectrumAt(const audio::AudioFrame& frame, float position) {
+    const float scaled = std::clamp(position, 0.0f, 1.0f) *
+                         static_cast<float>(audio::kBandCount - 1);
+    const auto left = static_cast<std::size_t>(scaled);
+    const auto right = std::min(left + 1, audio::kBandCount - 1);
+    const float fraction = scaled - static_cast<float>(left);
+    return frame.bands[left] * (1.0f - fraction) + frame.bands[right] * fraction;
+}
 lv_obj_t* label(lv_obj_t* parent, int x, int y, const char* value,
                 const lv_font_t* font, lv_color_t color) {
     lv_obj_t* item = lv_label_create(parent);
@@ -64,8 +94,8 @@ const std::array<MeterTick, 47>& meterTicks() {
     return ticks;
 }
 bool conceptStyle(VisualizerUi::SpectrumStyle style) {
-    return style >= VisualizerUi::SpectrumStyle::NeonPulse &&
-           style < VisualizerUi::SpectrumStyle::Count;
+    return style == VisualizerUi::SpectrumStyle::NeonPulse ||
+           style == VisualizerUi::SpectrumStyle::Mirror;
 }
 const char* spectrumStyleName(VisualizerUi::SpectrumStyle style) {
     switch (style) {
@@ -73,9 +103,14 @@ const char* spectrumStyleName(VisualizerUi::SpectrumStyle style) {
     case VisualizerUi::SpectrumStyle::Trace: return "TRACE";
     case VisualizerUi::SpectrumStyle::Dots: return "DOTS";
     case VisualizerUi::SpectrumStyle::NeonPulse: return "PULSE";
-    case VisualizerUi::SpectrumStyle::Prism: return "PRISM";
     case VisualizerUi::SpectrumStyle::Mirror: return "MIRROR";
     case VisualizerUi::SpectrumStyle::Waveform: return "WAVEFORM";
+    case VisualizerUi::SpectrumStyle::Halo: return "HALO";
+    case VisualizerUi::SpectrumStyle::Waterfall: return "WATERFALL";
+    case VisualizerUi::SpectrumStyle::Ridgeline: return "RIDGELINE";
+    case VisualizerUi::SpectrumStyle::TopoBloom: return "TOPO BLOOM";
+    case VisualizerUi::SpectrumStyle::AuroraWeave: return "AURORA";
+    case VisualizerUi::SpectrumStyle::CymaticMesh: return "CYMATIC";
     case VisualizerUi::SpectrumStyle::Count: break;
     }
     return "BARS";
@@ -88,12 +123,22 @@ ConceptColors conceptColors(VisualizerUi::SpectrumStyle style) {
     switch (style) {
     case Style::NeonPulse: return {kColdPanel, kColdGrid, kCyan,
                                   rgb(68, 86, 220), rgb(193, 247, 248)};
-    case Style::Prism: return {kColdPanel, kColdGrid, rgb(112, 210, 235),
-                              rgb(151, 127, 234), rgb(193, 247, 248)};
     case Style::Mirror: return {kColdPanel, kColdGrid, kCyan,
                                kViolet, rgb(193, 247, 248)};
     case Style::Waveform: return {kColdPanel, kColdGrid, kCyan,
                                  rgb(142, 177, 238), rgb(193, 247, 248)};
+    case Style::Halo: return {kColdPanel, kColdGrid, kCyan,
+                             rgb(143, 111, 229), rgb(193, 247, 248)};
+    case Style::Waterfall: return {kColdPanel, kColdGrid, kCyan,
+                                  rgb(82, 76, 174), rgb(201, 248, 250)};
+    case Style::Ridgeline: return {kColdPanel, kColdGrid, rgb(128, 224, 236),
+                                  rgb(96, 119, 184), rgb(201, 248, 250)};
+    case Style::TopoBloom: return {kColdPanel, kColdGrid, rgb(100, 222, 230),
+                                  rgb(90, 78, 202), rgb(210, 249, 250)};
+    case Style::AuroraWeave: return {kColdPanel, kColdGrid, rgb(98, 224, 231),
+                                    rgb(91, 91, 218), rgb(207, 249, 250)};
+    case Style::CymaticMesh: return {kColdPanel, kColdGrid, rgb(88, 199, 221),
+                                    rgb(98, 88, 209), rgb(215, 250, 251)};
     default: return {kColdPanel, kColdGrid, kCyan,
                      kViolet, rgb(193, 247, 248)};
     }
@@ -201,6 +246,8 @@ void VisualizerUi::setSpectrumStyle(SpectrumStyle style) {
     spectrumStyle_ = style;
     modeChanged_ = true;
     if (style == SpectrumStyle::Waveform) resetWaveform();
+    if (style == SpectrumStyle::Waterfall || style == SpectrumStyle::Ridgeline)
+        resetSpectrumHistory();
     if (mode_ == Mode::Spectrum) updateLabels();
 }
 void VisualizerUi::setStatus(const std::string& status) {
@@ -243,7 +290,7 @@ void VisualizerUi::updateLabels() {
         lv_obj_set_style_text_color(leftValue_, rgb(72, 53, 35), 0);
         lv_obj_set_style_text_color(rightValue_, rgb(72, 53, 35), 0);
         lv_label_set_text(modeLabel_, "ANALOG VU  /  STEREO");
-        lv_label_set_text(pageLabel_, "01 / 03");
+        lv_label_set_text(pageLabel_, "02 / 03");
         for (int side = 0; side < 2; ++side) {
             const int x = side == 0 ? 8 : 165;
             const std::size_t offset = static_cast<std::size_t>(side) * 4;
@@ -281,6 +328,39 @@ void VisualizerUi::updateLabels() {
             annotation(0, 17, 57, "LIVE AUDIO  /  PEAK ENVELOPE", palette.peak);
             annotation(1, 17, 181, "ROLLING HISTORY", rgb(142, 169, 182));
             annotation(2, 272, 181, "TIME >", rgb(142, 169, 182));
+        } else if (spectrumStyle_ == SpectrumStyle::Halo) {
+            annotation(0, 17, 57, "RADIAL / LIVE", rgb(193, 247, 248));
+            annotation(1, 17, 181, "LOW  /  HIGH  /  LOW", rgb(142, 169, 182));
+        } else if (spectrumStyle_ == SpectrumStyle::Waterfall) {
+            annotation(0, 17, 57, "SPECTRAL HISTORY", rgb(193, 247, 248));
+            annotation(1, 262, 57, "NOW v", rgb(142, 169, 182));
+            annotation(2, 17, 181, "LOW", rgb(142, 169, 182));
+            annotation(3, 145, 181, "MID", rgb(142, 169, 182));
+            annotation(4, 280, 181, "HIGH", rgb(142, 169, 182));
+        } else if (spectrumStyle_ == SpectrumStyle::Ridgeline) {
+            annotation(0, 17, 57, "SPECTRAL TERRAIN", rgb(193, 247, 248));
+            annotation(1, 276, 57, "LIVE", rgb(142, 169, 182));
+            annotation(2, 17, 181, "LOW", rgb(142, 169, 182));
+            annotation(3, 145, 181, "MID", rgb(142, 169, 182));
+            annotation(4, 280, 181, "HIGH", rgb(142, 169, 182));
+        } else if (spectrumStyle_ == SpectrumStyle::TopoBloom) {
+            annotation(0, 17, 57, "TOPOGRAPHIC ENERGY", rgb(193, 247, 248));
+            annotation(1, 274, 57, "DRIFT", rgb(142, 169, 182));
+            annotation(2, 17, 181, "LOW", rgb(142, 169, 182));
+            annotation(3, 145, 181, "MID", rgb(142, 169, 182));
+            annotation(4, 280, 181, "HIGH", rgb(142, 169, 182));
+        } else if (spectrumStyle_ == SpectrumStyle::AuroraWeave) {
+            annotation(0, 17, 57, "HARMONIC WEAVE", rgb(193, 247, 248));
+            annotation(1, 278, 57, "FLOW", rgb(142, 169, 182));
+            annotation(2, 17, 181, "LOW", rgb(142, 169, 182));
+            annotation(3, 145, 181, "MID", rgb(142, 169, 182));
+            annotation(4, 280, 181, "HIGH", rgb(142, 169, 182));
+        } else if (spectrumStyle_ == SpectrumStyle::CymaticMesh) {
+            annotation(0, 17, 57, "INTERFERENCE FIELD", rgb(193, 247, 248));
+            annotation(1, 269, 57, "NODES", rgb(142, 169, 182));
+            annotation(2, 17, 181, "LOW", rgb(142, 169, 182));
+            annotation(3, 145, 181, "MID", rgb(142, 169, 182));
+            annotation(4, 280, 181, "HIGH", rgb(142, 169, 182));
         } else {
             const auto ink = rgb(142, 169, 182);
             annotation(0, 16, 181, "SUB", ink);
@@ -502,6 +582,30 @@ void VisualizerUi::drawSpectrum(const audio::AudioFrame& frame, bool full) {
         drawWaveform(frame, full);
         return;
     }
+    if (spectrumStyle_ == SpectrumStyle::Halo) {
+        drawHalo(frame, full);
+        return;
+    }
+    if (spectrumStyle_ == SpectrumStyle::Waterfall) {
+        drawWaterfall(frame, full);
+        return;
+    }
+    if (spectrumStyle_ == SpectrumStyle::Ridgeline) {
+        drawRidgeline(frame, full);
+        return;
+    }
+    if (spectrumStyle_ == SpectrumStyle::TopoBloom) {
+        drawTopoBloom(frame, full);
+        return;
+    }
+    if (spectrumStyle_ == SpectrumStyle::AuroraWeave) {
+        drawAuroraWeave(frame, full);
+        return;
+    }
+    if (spectrumStyle_ == SpectrumStyle::CymaticMesh) {
+        drawCymaticMesh(frame, full);
+        return;
+    }
     if (conceptStyle(spectrumStyle_)) {
         drawConceptSpectrum(frame, full);
         return;
@@ -586,28 +690,6 @@ void VisualizerUi::drawPulseRibbon() {
     }
 }
 
-void VisualizerUi::drawPrismShard(std::size_t band) {
-    // Each frequency gets a faceted crystal with a pointed top and tapered
-    // base. Two colored faces make this legible even on the RGB332 panel.
-    const auto palette = conceptColors(SpectrumStyle::Prism);
-    const int cx = 21 + static_cast<int>(band) * 12;
-    const int height = barHeights_[band] * 96 / 100;
-    for (int row = 0; row < height; ++row) {
-        const int third = std::max(1, height / 3);
-        const int tail = std::max(1, height / 4);
-        const int halfWidth = row < third ? 1 + row * 3 / third :
-            row < height - tail ? 4 : 4 - (row - (height - tail)) * 2 / tail;
-        const int y = 178 - height + row;
-        rect(cx - halfWidth, y, halfWidth, 1, palette.accent);
-        rect(cx, y, halfWidth + 1, 1, palette.secondary);
-        pixel(cx, y, rgb(204, 238, 249));
-    }
-    const int peakY = 174 - peakHeights_[band] * 96 / 100;
-    pixel(cx, peakY - 1, palette.peak);
-    line(cx - 1, peakY, cx + 1, peakY, palette.peak);
-    pixel(cx, peakY + 1, palette.peak);
-}
-
 void VisualizerUi::drawConceptSpectrum(const audio::AudioFrame& frame, bool full) {
     const auto style = spectrumStyle_;
     const auto palette = conceptColors(style);
@@ -627,9 +709,7 @@ void VisualizerUi::drawConceptSpectrum(const audio::AudioFrame& frame, bool full
     clipArea_ = {8, 51, 311, 197};
     drawSpectrumBase();
     if (style == SpectrumStyle::NeonPulse) drawPulseRibbon();
-    else if (style == SpectrumStyle::Prism) {
-        for (std::size_t i = 0; i < audio::kBandCount; ++i) drawPrismShard(i);
-    } else {
+    else {
         constexpr int base = 124;
         line(16, base, 303, base, palette.secondary);
         for (std::size_t i = 0; i < audio::kBandCount; ++i) {
@@ -662,27 +742,420 @@ void VisualizerUi::drawConceptSpectrum(const audio::AudioFrame& frame, bool full
         for (std::size_t i = 0; i < audio::kBandCount; ++i) {
             if (!dirtyBands[i]) continue;
             const int x = 17 + static_cast<int>(i) * 12;
-            if (style == SpectrumStyle::Prism) {
-                const int top = std::max(77, std::min({178 - previousHeights[i] * 96 / 100,
-                    178 - barHeights_[i] * 96 / 100,
-                    173 - previousPeaks[i] * 96 / 100,
-                    173 - peakHeights_[i] * 96 / 100}));
-                invalidate({static_cast<lv_coord_t>(x), static_cast<lv_coord_t>(top),
-                            static_cast<lv_coord_t>(x + 8), 178});
-            } else {
-                constexpr int base = 124;
-                const int oldHeight = previousHeights[i] * 55 / 100;
-                const int newHeight = barHeights_[i] * 55 / 100;
-                const int oldPeak = previousPeaks[i] * 55 / 100;
-                const int newPeak = peakHeights_[i] * 55 / 100;
-                const int top = std::min({base - oldHeight, base - newHeight,
-                                          base - oldPeak - 4, base - newPeak - 4});
-                const int bottom = base + std::max(oldHeight, newHeight) * 2 / 3;
-                invalidate({static_cast<lv_coord_t>(x), static_cast<lv_coord_t>(top),
-                            static_cast<lv_coord_t>(x + 7), static_cast<lv_coord_t>(bottom)});
-            }
+            constexpr int base = 124;
+            const int oldHeight = previousHeights[i] * 55 / 100;
+            const int newHeight = barHeights_[i] * 55 / 100;
+            const int oldPeak = previousPeaks[i] * 55 / 100;
+            const int newPeak = peakHeights_[i] * 55 / 100;
+            const int top = std::min({base - oldHeight, base - newHeight,
+                                      base - oldPeak - 4, base - newPeak - 4});
+            const int bottom = base + std::max(oldHeight, newHeight) * 2 / 3;
+            invalidate({static_cast<lv_coord_t>(x), static_cast<lv_coord_t>(top),
+                        static_cast<lv_coord_t>(x + 7), static_cast<lv_coord_t>(bottom)});
         }
     }
+}
+void VisualizerUi::drawHalo(const audio::AudioFrame& frame, bool full) {
+    // Draw a native 320x240 radial visualization from our own 24-band frame.
+    // The PC and embedded renderers can share the audio frame without using
+    // WebGL, a copied shader, or additional per-frame heap allocations.
+    constexpr int cx = 160, cy = 124;
+    constexpr int spokes = 64;
+    constexpr float baseRadius = 42.0f;
+    float bass = 0.0f;
+    for (std::size_t i = 0; i < 5; ++i) bass += frame.bands[i];
+    bass = std::clamp(bass / 5.0f, 0.0f, 1.0f);
+    if (frame.generation != haloLastGeneration_) {
+        haloPulse_ = std::max(haloPulse_ * 0.83f,
+                              std::clamp((bass - haloLastBass_) * 3.0f, 0.0f, 1.0f));
+        if (frame.hasAudio) haloPhase_ = std::fmod(haloPhase_ + 0.003f + bass * 0.012f,
+                                                   2.0f * kPi);
+        haloLastBass_ = bass;
+        haloLastGeneration_ = frame.generation;
+    } else {
+        haloPulse_ *= 0.92f;
+    }
+
+    clipArea_ = {8, 51, 311, 197};
+    rect(10, 53, 304, 147, rgb(3, 10, 20));
+    rect(8, 51, 304, 147, kColdPanel);
+    rect(11, 54, 298, 141, rgb(4, 17, 30));
+    frameRect(8, 51, 304, 147, kColdGrid);
+
+    const auto ring = [this, cx, cy](float radius, lv_color_t color) {
+        constexpr int segments = 96;
+        int lastX = cx + static_cast<int>(std::lround(radius));
+        int lastY = cy;
+        for (int i = 1; i <= segments; ++i) {
+            const float angle = 2.0f * kPi * i / segments;
+            const int x = cx + static_cast<int>(std::lround(std::cos(angle) * radius));
+            const int y = cy + static_cast<int>(std::lround(std::sin(angle) * radius));
+            line(lastX, lastY, x, y, color);
+            lastX = x;
+            lastY = y;
+        }
+    };
+    ring(42.0f, rgb(31, 72, 91));
+    ring(70.0f + haloPulse_ * 2.0f, rgb(23, 54, 78));
+    ring(22.0f, rgb(39, 85, 112));
+    disc(cx, cy, 17 + static_cast<int>(haloPulse_ * 3.0f), rgb(12, 39, 66));
+    disc(cx, cy, 12, rgb(7, 27, 49));
+
+    for (int i = 0; i < spokes; ++i) {
+        const float angle = -kPi * 0.5f + haloPhase_ + 2.0f * kPi * i / spokes;
+        const float ux = std::cos(angle), uy = std::sin(angle);
+        const float tx = -uy, ty = ux;
+        const float frequency = static_cast<float>(std::min(i, spokes - i)) /
+                                (spokes / 2);
+        const float position = frequency * static_cast<float>(audio::kBandCount - 1);
+        const std::size_t lower = static_cast<std::size_t>(position);
+        const std::size_t upper = std::min(lower + 1, audio::kBandCount - 1);
+        const float fraction = position - static_cast<float>(lower);
+        const float value = std::clamp(frame.bands[lower] * (1.0f - fraction) +
+                                      frame.bands[upper] * fraction, 0.0f, 1.0f);
+        const float peak = std::clamp(frame.peaks[lower] * (1.0f - fraction) +
+                                     frame.peaks[upper] * fraction, 0.0f, 1.0f);
+        const float barEnd = baseRadius + 4.0f + std::sqrt(value) * 23.0f;
+        const float peakRadius = baseRadius + 5.0f + peak * 23.0f;
+        const auto color = haloColor(frequency);
+        const auto xAt = [cx, ux, tx](float radius, float offset) {
+            return cx + static_cast<int>(std::lround(ux * radius + tx * offset));
+        };
+        const auto yAt = [cy, uy, ty](float radius, float offset) {
+            return cy + static_cast<int>(std::lround(uy * radius + ty * offset));
+        };
+        line(xAt(baseRadius - 4.0f, 0), yAt(baseRadius - 4.0f, 0),
+             xAt(baseRadius - 1.0f, 0), yAt(baseRadius - 1.0f, 0),
+             rgb(35, 77, 103));
+        if (value > 0.01f) {
+            line(xAt(baseRadius, -1), yAt(baseRadius, -1),
+                 xAt(barEnd + 2.0f, -1), yAt(barEnd + 2.0f, -1), rgb(28, 73, 112));
+            line(xAt(baseRadius, 1), yAt(baseRadius, 1),
+                 xAt(barEnd + 2.0f, 1), yAt(barEnd + 2.0f, 1), rgb(28, 73, 112));
+            line(xAt(baseRadius, 0), yAt(baseRadius, 0),
+                 xAt(barEnd, 0), yAt(barEnd, 0), color);
+            pixel(xAt(barEnd, 0), yAt(barEnd, 0), rgb(193, 247, 248));
+        }
+        if (peak > 0.02f)
+            line(xAt(peakRadius, -1.5f), yAt(peakRadius, -1.5f),
+                 xAt(peakRadius, 1.5f), yAt(peakRadius, 1.5f),
+                 rgb(205, 241, 250));
+    }
+
+    // The inside ring shows the actual stereo waveform, rather than a second
+    // copy of the spectrum. Scale is inherited from the PC audio processor.
+    float maximum = 0.0f;
+    for (std::size_t i = 0; i < audio::kWavePoints; ++i)
+        maximum = std::max(maximum, std::abs((frame.leftWave[i] + frame.rightWave[i]) * 0.5f));
+    const float scale = frame.scopeScale[0] >= 0.0f ? frame.scopeScale[0] * 0.24f :
+        frame.hasAudio ? 6.0f / std::max(maximum, 0.01f) : 0.0f;
+    int lastX = 0, lastY = 0;
+    for (std::size_t i = 0; i <= audio::kWavePoints; ++i) {
+        const std::size_t sampleIndex = i % audio::kWavePoints;
+        const float sample = (frame.leftWave[sampleIndex] + frame.rightWave[sampleIndex]) * 0.5f;
+        const float displacement = std::clamp(sample * scale, -7.0f, 7.0f);
+        const float angle = -kPi * 0.5f + haloPhase_ +
+                            2.0f * kPi * static_cast<float>(i) / audio::kWavePoints;
+        const float radius = 31.0f + displacement;
+        const int x = cx + static_cast<int>(std::lround(std::cos(angle) * radius));
+        const int y = cy + static_cast<int>(std::lround(std::sin(angle) * radius));
+        if (i) {
+            line(lastX, lastY - 1, x, y - 1, rgb(35, 103, 151));
+            line(lastX, lastY, x, y, rgb(146, 225, 246));
+        }
+        lastX = x;
+        lastY = y;
+    }
+    // A light contour makes the waveform legible without a costly blur pass.
+    const float centerEnergy = std::max(haloPulse_, bass * 0.5f);
+    ring(20.0f + centerEnergy * 2.0f, rgb(55, 122, 163));
+    disc(cx, cy, 4 + static_cast<int>(centerEnergy * 4.0f), rgb(42, 128, 174));
+    disc(cx, cy, 2, rgb(193, 247, 248));
+    if (!full) invalidate(clipArea_);
+}
+void VisualizerUi::drawWaterfall(const audio::AudioFrame& frame, bool full) {
+    const bool fresh = frame.generation != waterfallLastGeneration_;
+    if (fresh) {
+        std::move(waterfall_.begin() + 1, waterfall_.end(), waterfall_.begin());
+        auto& newest = waterfall_.back();
+        for (std::size_t band = 0; band < audio::kBandCount; ++band)
+            newest[band] = static_cast<std::uint8_t>(std::clamp(
+                static_cast<int>(std::lround(frame.bands[band] * 255.0f)), 0, 255));
+        waterfallLastGeneration_ = frame.generation;
+    }
+    if (!full && !fresh) return;
+
+    clipArea_ = {8, 51, 311, 197};
+    rect(10, 53, 304, 147, rgb(3, 10, 20));
+    rect(8, 51, 304, 147, kColdPanel);
+    frameRect(8, 51, 304, 147, kColdGrid);
+    rect(16, 72, 288, 108, rgb(3, 12, 21));
+    for (int x : {16, 112, 208, 304}) line(x, 72, x, 179, rgb(25, 57, 76));
+    for (std::size_t row = 0; row < kWaterfallRows; ++row) {
+        const int y = 73 + static_cast<int>(row) * 9;
+        for (std::size_t band = 0; band < audio::kBandCount; ++band) {
+            const int x = 17 + static_cast<int>(band) * 12;
+            rect(x, y, 10, 7, waterfallColor(waterfall_[row][band]));
+        }
+    }
+    line(16, 179, 303, 179, rgb(85, 127, 145));
+    if (!full) invalidate(clipArea_);
+}
+
+void VisualizerUi::drawRidgeline(const audio::AudioFrame& frame, bool full) {
+    const bool fresh = frame.generation != ridgelineLastGeneration_;
+    if (fresh) {
+        std::move(ridgeline_.begin() + 1, ridgeline_.end(), ridgeline_.begin());
+        auto& newest = ridgeline_.back();
+        for (std::size_t band = 0; band < audio::kBandCount; ++band)
+            newest[band] = static_cast<std::uint8_t>(std::clamp(
+                static_cast<int>(std::lround(frame.bands[band] * 100.0f)), 0, 100));
+        ridgelineLastGeneration_ = frame.generation;
+    }
+    if (!full && !fresh) return;
+
+    const std::array<lv_color_t, kRidgelineRows> fills{
+        rgb(25, 45, 75), rgb(24, 57, 92), rgb(22, 71, 104),
+        rgb(18, 82, 118), rgb(12, 93, 128)};
+    const std::array<lv_color_t, kRidgelineRows> lines{
+        rgb(76, 95, 145), rgb(96, 119, 184), rgb(109, 159, 219),
+        rgb(105, 196, 221), rgb(128, 224, 236)};
+    clipArea_ = {8, 51, 311, 197};
+    rect(10, 53, 304, 147, rgb(3, 10, 20));
+    rect(8, 51, 304, 147, kColdPanel);
+    rect(11, 54, 298, 141, rgb(7, 23, 39));
+    frameRect(8, 51, 304, 147, kColdGrid);
+    for (const int y : {78, 98, 118, 138, 158, 178})
+        line(17, y, 303, y, rgb(24, 52, 69));
+    for (int x = 17; x <= 303; x += 48)
+        line(x, 178, 154 + (x - 160) / 9, 73, rgb(20, 48, 66));
+
+    for (std::size_t row = 0; row < kRidgelineRows; ++row) {
+        const int baseline = 106 + static_cast<int>(row) * 18;
+        int previousX = 17;
+        int previousY = baseline - static_cast<int>(ridgeline_[row][0]) * 25 / 100;
+        for (int x = 17; x <= 293; ++x) {
+            const int position = x - 17;
+            const int lower = std::min(position / 12, 22);
+            const int fraction = position - lower * 12;
+            const int level = (static_cast<int>(ridgeline_[row][lower]) * (12 - fraction) +
+                               static_cast<int>(ridgeline_[row][lower + 1]) * fraction + 6) / 12;
+            const int y = baseline - level * 25 / 100;
+            rect(x, y, 1, baseline - y + 1, fills[row]);
+            line(previousX, previousY, x, y, lines[row]);
+            previousX = x;
+            previousY = y;
+        }
+    }
+    line(16, 179, 303, 179, rgb(85, 127, 145));
+    if (!full) invalidate(clipArea_);
+}
+
+void VisualizerUi::drawTopoBloom(const audio::AudioFrame& frame, bool full) {
+    const bool fresh = frame.generation != topoLastGeneration_;
+    if (fresh) {
+        float bass = 0.0f;
+        for (std::size_t i = 0; i < 6; ++i) bass += frame.bands[i];
+        bass /= 6.0f;
+        topoPhase_ = std::fmod(topoPhase_ + 0.012f + bass * 0.010f, 2.0f * kPi);
+        topoLastGeneration_ = frame.generation;
+    }
+    if (!full && !fresh) return;
+
+    clipArea_ = {8, 51, 311, 197};
+    rect(8, 51, 304, 147, kColdPanel);
+    rect(11, 54, 298, 141, rgb(4, 18, 32));
+    frameRect(8, 51, 304, 147, kColdGrid);
+
+    // Sparse ordered grain creates a rich surface without alpha blending.
+    const int grainPhase = static_cast<int>(topoPhase_ * 11.0f);
+    for (int y = 73; y <= 177; y += 4) {
+        for (int x = 18 + ((y / 4) & 1) * 3; x <= 302; x += 6) {
+            const int hash = x * 13 + y * 29 + grainPhase;
+            if ((hash % 11) == 0) pixel(x, y, rgb(30, 69, 91));
+            else if ((hash % 17) == 0) pixel(x, y, rgb(50, 57, 112));
+        }
+    }
+
+    constexpr int contours = 11;
+    constexpr int segments = 84;
+    const int cx = 145 + static_cast<int>(std::lround(std::sin(topoPhase_ * 0.43f) * 5.0f));
+    const int cy = 127 + static_cast<int>(std::lround(std::cos(topoPhase_ * 0.37f) * 3.0f));
+    for (int contour = contours - 1; contour >= 0; --contour) {
+        const float base = 8.0f + contour * 6.4f;
+        const float frequency = static_cast<float>(contour) / (contours - 1);
+        const auto color = haloColor(frequency);
+        int previousX = 0, previousY = 0;
+        for (int segment = 0; segment <= segments; ++segment) {
+            const float angle = 2.0f * kPi * segment / segments;
+            const float audioPosition = std::fmod(angle / (2.0f * kPi) + 0.13f, 1.0f);
+            const float energy = spectrumAt(frame, audioPosition);
+            const float warp = std::sin(angle * 3.0f + topoPhase_ + contour * 0.31f) * 2.4f +
+                               std::sin(angle * 7.0f - topoPhase_ * 0.63f + contour) * 1.3f +
+                               energy * (3.2f + contour * 0.16f);
+            const float radius = base + warp;
+            const int x = cx + static_cast<int>(std::lround(std::cos(angle) * radius * 1.82f));
+            const int y = cy + static_cast<int>(std::lround(std::sin(angle) * radius * 0.72f));
+            if (segment) {
+                line(previousX, previousY + 1, x, y + 1, rgb(20, 45, 70));
+                line(previousX, previousY, x, y, color);
+            }
+            if (((segment + contour * 3) % 13) == 0)
+                pixel(x + 1, y, rgb(205, 248, 250));
+            previousX = x;
+            previousY = y;
+        }
+    }
+    disc(cx, cy, 3, rgb(83, 190, 211));
+    disc(cx, cy, 1, rgb(215, 250, 251));
+    line(16, 179, 303, 179, rgb(85, 127, 145));
+    if (!full) invalidate(clipArea_);
+}
+
+void VisualizerUi::drawAuroraWeave(const audio::AudioFrame& frame, bool full) {
+    const bool fresh = frame.generation != auroraLastGeneration_;
+    if (fresh) {
+        float mid = 0.0f;
+        for (std::size_t i = 6; i < 17; ++i) mid += frame.bands[i];
+        mid /= 11.0f;
+        auroraPhase_ = std::fmod(auroraPhase_ + 0.010f + mid * 0.009f, 2.0f * kPi);
+        auroraLastGeneration_ = frame.generation;
+    }
+    if (!full && !fresh) return;
+
+    clipArea_ = {8, 51, 311, 197};
+    rect(8, 51, 304, 147, kColdPanel);
+    rect(11, 54, 298, 141, rgb(4, 18, 32));
+    frameRect(8, 51, 304, 147, kColdGrid);
+    for (int y : {82, 106, 130, 154, 178})
+        line(17, y, 303, y, rgb(18, 46, 65));
+
+    const std::array<lv_color_t, 5> fills{
+        rgb(13, 43, 70), rgb(18, 50, 83), rgb(22, 55, 94),
+        rgb(26, 57, 105), rgb(29, 53, 106)};
+    const std::array<lv_color_t, 5> edges{
+        rgb(70, 132, 183), rgb(73, 171, 205), rgb(99, 221, 229),
+        rgb(88, 159, 220), rgb(112, 105, 224)};
+
+    for (int ribbon = 4; ribbon >= 0; --ribbon) {
+        const int baseline = 89 + ribbon * 17;
+        int previousTop = baseline, previousBottom = baseline, previousCenter = baseline;
+        for (int x = 17; x <= 303; x += 2) {
+            const float t = static_cast<float>(x - 17) / 286.0f;
+            const float energy = spectrumAt(frame, t);
+            const float direction = ribbon & 1 ? -1.0f : 1.0f;
+            const float wave = std::sin(t * 2.0f * kPi * (1.05f + ribbon * 0.12f) +
+                                        direction * auroraPhase_ + ribbon * 0.78f) *
+                                   (4.0f + energy * 7.0f) +
+                               std::sin(t * 5.0f * kPi - auroraPhase_ * 0.48f + ribbon) * 2.2f;
+            const int center = baseline + static_cast<int>(std::lround(wave));
+            const int half = 2 + static_cast<int>(std::lround(energy * 3.0f));
+            const int top = center - half;
+            const int bottom = center + half;
+            for (int y = top + 1; y < bottom; ++y) {
+                if (((x + y + ribbon * 2) & 3) == 0) pixel(x, y, fills[ribbon]);
+                if (((x + y + ribbon) % 7) == 0) pixel(x + 1, y, rgb(42, 91, 132));
+            }
+            if (x > 17) {
+                line(x - 2, previousTop, x, top, edges[ribbon]);
+                line(x - 2, previousBottom, x, bottom, rgb(49, 103, 157));
+                for (int thread = -2; thread <= 2; ++thread) {
+                    const int offset = thread * 2;
+                    line(x - 2, previousCenter + offset, x, center + offset,
+                         thread == 0 ? edges[ribbon] :
+                         std::abs(thread) % 2 ? rgb(50, 114, 160) : rgb(43, 83, 143));
+                }
+            }
+            if (((x / 2 + ribbon * 5) % 17) == 0)
+                pixel(x, top - 1, rgb(205, 248, 250));
+            previousTop = top;
+            previousBottom = bottom;
+            previousCenter = center;
+        }
+    }
+    line(16, 179, 303, 179, rgb(85, 127, 145));
+    if (!full) invalidate(clipArea_);
+}
+
+void VisualizerUi::drawCymaticMesh(const audio::AudioFrame& frame, bool full) {
+    const bool fresh = frame.generation != cymaticLastGeneration_;
+    if (fresh) {
+        float high = 0.0f;
+        for (std::size_t i = 15; i < audio::kBandCount; ++i) high += frame.bands[i];
+        high /= static_cast<float>(audio::kBandCount - 15);
+        cymaticPhase_ = std::fmod(cymaticPhase_ + 0.008f + high * 0.012f, 2.0f * kPi);
+        cymaticLastGeneration_ = frame.generation;
+    }
+    if (!full && !fresh) return;
+
+    clipArea_ = {8, 51, 311, 197};
+    rect(8, 51, 304, 147, kColdPanel);
+    rect(11, 54, 298, 141, rgb(3, 17, 30));
+    frameRect(8, 51, 304, 147, kColdGrid);
+
+    for (int column = 0; column < 20; ++column) {
+        const int baseX = 20 + column * 15;
+        const float t = static_cast<float>(baseX - 17) / 286.0f;
+        const float energy = spectrumAt(frame, t);
+        int previousX = baseX, previousY = 72;
+        for (int y = 72; y <= 178; y += 3) {
+            const float warp = std::sin(y * 0.087f + cymaticPhase_ + column * 0.51f) *
+                                   (1.4f + energy * 4.8f) +
+                               std::sin((y + baseX) * 0.041f - cymaticPhase_ * 0.61f) * 2.0f;
+            const int x = baseX + static_cast<int>(std::lround(warp));
+            if (y > 72) line(previousX, previousY, x, y,
+                             column % 3 == 0 ? rgb(45, 104, 139) : rgb(28, 67, 96));
+            previousX = x;
+            previousY = y;
+        }
+    }
+    for (int row = 0; row < 14; ++row) {
+        const int baseY = 74 + row * 8;
+        int previousX = 17, previousY = baseY;
+        for (int x = 17; x <= 303; x += 4) {
+            const float t = static_cast<float>(x - 17) / 286.0f;
+            const float energy = spectrumAt(frame, t);
+            const float warp = std::sin(x * 0.055f - cymaticPhase_ + row * 0.64f) *
+                                   (1.5f + energy * 4.2f) +
+                               std::sin((x - baseY) * 0.036f + cymaticPhase_ * 0.53f) * 2.0f;
+            const int y = baseY + static_cast<int>(std::lround(warp));
+            if (x > 17) line(previousX, previousY, x, y,
+                             row % 3 == 0 ? rgb(54, 112, 150) : rgb(31, 70, 101));
+            previousX = x;
+            previousY = y;
+        }
+    }
+
+    // Stable intersections brighten on transients, making the mesh react
+    // without resorting to fast camera motion or noisy particle churn.
+    for (int column = 1; column < 20; column += 2) {
+        const int baseX = 20 + column * 15;
+        const float t = static_cast<float>(baseX - 17) / 286.0f;
+        const float energy = spectrumAt(frame, t);
+        for (int row = 1; row < 14; row += 2) {
+            const int baseY = 74 + row * 8;
+            const float pulse = 0.5f + 0.5f * std::sin(column * 0.83f + row * 0.57f +
+                                                       cymaticPhase_ * 2.0f);
+            if (energy * 0.72f + pulse * 0.28f < 0.24f) continue;
+            const int x = baseX + static_cast<int>(std::lround(
+                std::sin(baseY * 0.087f + cymaticPhase_ + column * 0.51f) *
+                (1.4f + energy * 4.8f)));
+            const int y = baseY + static_cast<int>(std::lround(
+                std::sin(baseX * 0.055f - cymaticPhase_ + row * 0.64f) *
+                (1.5f + energy * 4.2f)));
+            disc(x, y, energy > 0.72f ? 2 : 1,
+                 energy > 0.55f ? rgb(195, 247, 250) : rgb(86, 190, 211));
+        }
+    }
+    line(16, 179, 303, 179, rgb(85, 127, 145));
+    if (!full) invalidate(clipArea_);
+}
+
+void VisualizerUi::resetSpectrumHistory() {
+    waterfall_ = {};
+    ridgeline_ = {};
+    waterfallLastGeneration_ = 0;
+    ridgelineLastGeneration_ = 0;
 }
 void VisualizerUi::resetWaveform() {
     waveformPeak_.fill(0);

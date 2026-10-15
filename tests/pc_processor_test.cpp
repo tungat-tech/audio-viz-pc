@@ -18,17 +18,32 @@ int main() {
     app::Options options;
     std::string error;
     char name[] = "AudioViz_PC";
+    char* defaults[] = {name};
+    require(app::parseOptions(1, defaults, options, error) && options.initialMode == 1,
+            "Spectrum is not the default first mode");
     char serial[] = "--serial";
     char port[] = "COM6";
     char* invalid[] = {name, serial, port};
     require(!app::parseOptions(3, invalid, options, error),
             "Public app unexpectedly accepts a device-link option");
     char style[] = "--style";
-    char prism[] = "4";
-    char* selectStyle[] = {name, style, prism};
+    char mirror[] = "4";
+    char* selectStyle[] = {name, style, mirror};
     require(app::parseOptions(3, selectStyle, options, error) && options.initialStyle == 4,
-            "Prism style selection failed");
-    char invalidStyle[] = "7";
+            "Mirror style selection failed");
+    char halo[] = "6";
+    char* selectHalo[] = {name, style, halo};
+    require(app::parseOptions(3, selectHalo, options, error) && options.initialStyle == 6,
+            "Halo style selection failed");
+    char ridgeline[] = "8";
+    char* selectRidgeline[] = {name, style, ridgeline};
+    require(app::parseOptions(3, selectRidgeline, options, error) && options.initialStyle == 8,
+            "Ridgeline style selection failed");
+    char cymatic[] = "11";
+    char* selectCymatic[] = {name, style, cymatic};
+    require(app::parseOptions(3, selectCymatic, options, error) && options.initialStyle == 11,
+            "Cymatic style selection failed");
+    char invalidStyle[] = "12";
     char* rejectStyle[] = {name, style, invalidStyle};
     require(!app::parseOptions(3, rejectStyle, options, error),
             "Out-of-range style was accepted");

@@ -48,10 +48,10 @@ inline bool parseOptions(int argc, char* const argv[], Options& options, std::st
             if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||
                 (option == "--frames" && number < 0) ||
                 (option == "--mode" && (number < 1 || number > 3)) ||
-                (option == "--style" && (number < 0 || number > 6))) {
+                (option == "--style" && (number < 0 || number > 11))) {
                 error = std::string(option) + (option == "--frames"
                     ? " requires a nonnegative integer (0 means unlimited)"
-                    : option == "--style" ? " requires an integer from 0 to 6"
+                    : option == "--style" ? " requires an integer from 0 to 11"
                     : " requires 1, 2 or 3");
                 return false;
             }

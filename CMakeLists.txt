@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(AudioViz_PC VERSION 0.0.1 LANGUAGES C CXX)
+project(AudioViz_PC VERSION 0.0.2 LANGUAGES C CXX)
 
 # Some pinned dependencies declare policy versions older than CMake 4 accepts.
 if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0" AND NOT DEFINED CMAKE_POLICY_VERSION_MINIMUM)
@@ -100,6 +100,14 @@ if(WIN32)
     add_executable(AudioViz_PC WIN32 main.cpp branding/AudioViz.rc)
     target_include_directories(AudioViz_PC PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/branding)
     target_link_libraries(AudioViz_PC PRIVATE SDL2::SDL2main)
+elseif(APPLE)
+    add_executable(AudioViz_PC MACOSX_BUNDLE main.cpp)
+    set_target_properties(AudioViz_PC PROPERTIES
+        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/branding/Info.plist.in"
+        MACOSX_BUNDLE_BUNDLE_NAME "AudioViz PC"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "tech.tungat.audiovizpc"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
 else()
     add_executable(AudioViz_PC main.cpp)
 endif()
@@ -119,5 +127,15 @@ if(BUILD_TESTING AND BUILD_PORTABLE_DEMO)
             COMMAND AudioViz_PC --demo --mode ${mode} --frames 6
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/gui-demo-mode-${mode}.bmp)
         set_tests_properties(gui_demo_mode_${mode} PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy")
+    endforeach()
+    add_test(NAME gui_demo_halo
+        COMMAND AudioViz_PC --demo --mode 1 --style 6 --frames 60
+            --screenshot ${CMAKE_CURRENT_BINARY_DIR}/gui-demo-halo.bmp)
+    set_tests_properties(gui_demo_halo PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy")
+    foreach(style RANGE 7 11)
+        add_test(NAME gui_demo_style_${style}
+            COMMAND AudioViz_PC --demo --mode 1 --style ${style} --frames 90
+                --screenshot ${CMAKE_CURRENT_BINARY_DIR}/gui-demo-style-${style}.bmp)
+        set_tests_properties(gui_demo_style_${style} PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy")
     endforeach()
 endif()
