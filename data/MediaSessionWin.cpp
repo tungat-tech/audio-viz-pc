@@ -130,7 +130,10 @@ std::string takeHString(HSTRING value) {
     const wchar_t* text = WindowsGetStringRawBuffer(value, &length);
     const int bytes = WideCharToMultiByte(CP_UTF8, 0, text, static_cast<int>(length),
                                           nullptr, 0, nullptr, nullptr);
-    std::string result(static_cast<std::size_t>(std::max(0, bytes)), '\0');
+    // windows.h defines max as a function-like macro unless NOMINMAX is set.
+    // Parenthesizing the qualified name keeps this translation unit usable by
+    // both MSVC and the MinGW cross-build without relying on include order.
+    std::string result(static_cast<std::size_t>((std::max)(0, bytes)), '\0');
     if (bytes > 0)
         WideCharToMultiByte(CP_UTF8, 0, text, static_cast<int>(length), result.data(),
                             bytes, nullptr, nullptr);

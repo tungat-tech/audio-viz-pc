@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 LV_FONT_DECLARE(lv_font_montserrat_vietnamese_12);
 LV_FONT_DECLARE(lv_font_montserrat_vietnamese_14);
