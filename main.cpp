@@ -2,6 +2,7 @@
 #include "app/Options.hpp"
 #include "audio/AudioCapture.hpp"
 #include "audio/AudioProcessor.hpp"
+#include "data/UtilityDataProvider.hpp"
 #include "simulator/Simulator.hpp"
 #include "ui/VisualizerUi.hpp"
 #include <SDL.h>
@@ -31,10 +32,11 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (options.help) {
-        std::cout << "AudioViz_PC [--demo] [--mode 1|2|3] [--style 0..11] [--frames N]"
+        std::cout << "AudioViz_PC [--demo] [--mode 1..7] [--style 0..11] [--frames N]"
                      " [--screenshot FILE.bmp]"
-                     " [--audio-device NAME] [--list-audio-devices]\n"
-                     "Modes: 1 Spectrum (default), 2 VU, 3 Oscilloscope.\n"
+                     " [--audio-device NAME] [--weather-city CITY] [--list-audio-devices]\n"
+                     "Modes: 1 Spectrum (default), 2 VU, 3 Oscilloscope, 4 Market Pulse,\n"
+                     "       5 Studio Clock, 6 Now Playing, 7 Desk Board.\n"
                      "N is nonnegative; 0 runs until the window is closed.\n"
                      "Screenshots are saved on exit.\n";
         return 0;
@@ -58,12 +60,14 @@ int main(int argc, char** argv) {
 
     audio::AudioProcessor processor;
     audio::AudioCapture capture(processor);
+    // Demo/screenshot runs remain deterministic and never contact the network.
+    data::UtilityDataProvider utilityData(!options.demo, options.weatherCity);
     ui::VisualizerUi interface;
     if (!interface.ready()) {
         std::cerr << "Canvas allocation failed\n";
         return 1;
     }
-    for (int mode = 1; mode < options.initialMode; ++mode) interface.nextMode();
+    interface.setMode(static_cast<unsigned>(options.initialMode));
     interface.setSpectrumStyle(static_cast<ui::VisualizerUi::SpectrumStyle>(options.initialStyle));
     bool captureStarted = false;
     bool captureRunning = false;
@@ -93,8 +97,11 @@ int main(int argc, char** argv) {
         while (simulator.pollEvent(event)) {
             simulator.handleEvent(event);
             if (event.type == SDL_QUIT) running = false;
-            if (event.type == SDL_KEYDOWN && !event.key.repeat &&
-                event.key.keysym.sym == SDLK_SPACE) interface.nextMode();
+            if (event.type == SDL_KEYDOWN && !event.key.repeat) {
+                if (event.key.keysym.sym == SDLK_SPACE) interface.nextMode();
+                else if (event.key.keysym.sym >= SDLK_1 && event.key.keysym.sym <= SDLK_7)
+                    interface.setMode(static_cast<unsigned>(event.key.keysym.sym - SDLK_0));
+            }
         }
         if (options.demo) demoSignal.generate(processor, elapsed);
         else if (captureStarted) {
@@ -107,8 +114,10 @@ int main(int argc, char** argv) {
             }
         }
         simulator.tick(elapsed);
+        const auto audioFrame = processor.snapshot();
+        utilityData.update(elapsed, audioFrame);
         const auto waveformHistory = processor.waveformHistory();
-        interface.render(processor.snapshot(), &waveformHistory);
+        interface.render(audioFrame, &waveformHistory, &utilityData.snapshot());
         lv_timer_handler();
         simulator.present();
         if (options.frameLimit > 0 && ++renderedFrames >= options.frameLimit) {

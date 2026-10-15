@@ -2,6 +2,7 @@
 
 #include "audio/AudioFrame.hpp"
 #include "audio/WaveformHistory.hpp"
+#include "data/UtilityFrame.hpp"
 #include <lvgl.h>
 #include <array>
 #include <cstddef>
@@ -35,16 +36,20 @@ public:
     // An unready instance has no LVGL objects; all mutating methods are safe no-ops.
     bool ready() const { return canvas_ != nullptr; }
     void nextMode();
+    void setMode(unsigned oneBasedMode);
     // Optional application-level handler; built-in behavior remains available.
     void setTouchActionHandler(TouchActionHandler handler, void* context);
     void setSpectrumStyle(SpectrumStyle style);
     SpectrumStyle spectrumStyle() const { return spectrumStyle_; }
     void setStatus(const std::string& status);
     void render(const audio::AudioFrame& frame,
-                const audio::WaveformHistory* waveformHistory = nullptr);
+                const audio::WaveformHistory* waveformHistory = nullptr,
+                const data::UtilityFrame* utilityFrame = nullptr);
 
 private:
-    enum class Mode { Spectrum = 0, Vu = 1, Scope = 2 };
+    enum class Mode {
+        Spectrum = 0, Vu, Scope, Market, Clock, NowPlaying, DeskBoard, Count
+    };
     struct MeterState {
         int tipX = 0;
         int tipY = 0;
@@ -86,6 +91,17 @@ private:
     void drawScopeBase(int channel);
     void drawScopeTrace(int channel);
     void drawScope(const audio::AudioFrame& frame, bool full);
+    void drawMarket(const data::UtilityFrame& utility, bool full);
+    void drawClock(const audio::AudioFrame& frame, const data::UtilityFrame& utility,
+                   bool full);
+    void drawNowPlaying(const audio::AudioFrame& frame,
+                        const data::UtilityFrame& utility, bool full);
+    void drawDeskBoard(const audio::AudioFrame& frame,
+                       const data::UtilityFrame& utility, bool full);
+    void drawUtilityPanel();
+    void drawMiniWave(const audio::AudioFrame& frame, int left, int right,
+                      int center, int amplitude, lv_color_t primary,
+                      lv_color_t secondary);
 
     std::unique_ptr<lv_color_t[]> ownedBuffer_;
     lv_color_t* buffer_ = nullptr;
@@ -141,6 +157,8 @@ private:
     float topoPhase_ = 0.0f;
     float auroraPhase_ = 0.0f;
     float cymaticPhase_ = 0.0f;
+    std::uint64_t utilityLastGeneration_ = 0;
+    std::uint64_t marketLastGeneration_ = 0;
 };
 
 } // namespace ui

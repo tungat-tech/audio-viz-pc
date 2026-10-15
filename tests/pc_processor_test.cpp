@@ -47,6 +47,21 @@ int main() {
     char* rejectStyle[] = {name, style, invalidStyle};
     require(!app::parseOptions(3, rejectStyle, options, error),
             "Out-of-range style was accepted");
+    char mode[] = "--mode";
+    char deskBoard[] = "7";
+    char* selectDeskBoard[] = {name, mode, deskBoard};
+    require(app::parseOptions(3, selectDeskBoard, options, error) && options.initialMode == 7,
+            "Desk Board mode selection failed");
+    char invalidMode[] = "8";
+    char* rejectMode[] = {name, mode, invalidMode};
+    require(!app::parseOptions(3, rejectMode, options, error),
+            "Out-of-range mode was accepted");
+    char weatherOption[] = "--weather-city";
+    char weatherValue[] = "Ho Chi Minh City";
+    char* selectWeather[] = {name, weatherOption, weatherValue};
+    require(app::parseOptions(3, selectWeather, options, error) &&
+            options.weatherCity == "Ho Chi Minh City",
+            "Weather city selection failed");
 
     audio::AudioProcessor processor;
     app::DemoSignal demo;

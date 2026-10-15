@@ -4,6 +4,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+
+LV_FONT_DECLARE(lv_font_montserrat_vietnamese_12);
+LV_FONT_DECLARE(lv_font_montserrat_vietnamese_14);
 #include <new>
 
 namespace ui {
@@ -236,7 +239,19 @@ void VisualizerUi::setTouchActionHandler(TouchActionHandler handler, void* conte
 void VisualizerUi::nextMode() {
     if (!ready()) return;
     modeChanged_ = true;
-    mode_ = static_cast<Mode>((static_cast<int>(mode_) + 1) % 3);
+    mode_ = static_cast<Mode>((static_cast<int>(mode_) + 1) %
+                              static_cast<int>(Mode::Count));
+    if (mode_ == Mode::Spectrum && spectrumStyle_ == SpectrumStyle::Waveform)
+        resetWaveform();
+    updateLabels();
+}
+void VisualizerUi::setMode(unsigned oneBasedMode) {
+    if (!ready() || oneBasedMode == 0 ||
+        oneBasedMode > static_cast<unsigned>(Mode::Count)) return;
+    const Mode next = static_cast<Mode>(oneBasedMode - 1);
+    if (next == mode_) return;
+    mode_ = next;
+    modeChanged_ = true;
     if (mode_ == Mode::Spectrum && spectrumStyle_ == SpectrumStyle::Waveform)
         resetWaveform();
     updateLabels();
@@ -259,8 +274,18 @@ void VisualizerUi::setStatus(const std::string& status) {
 }
 void VisualizerUi::updateLabels() {
     lv_obj_set_pos(pageLabel_, 268, 13);
+    lv_obj_set_pos(title_, 20, 7);
+    lv_obj_set_style_text_letter_space(title_, 0, 0);
+    lv_obj_clear_flag(modeLabel_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(styleButton_, LV_OBJ_FLAG_HIDDEN);
-    for (auto* item : annotations_) lv_obj_add_flag(item, LV_OBJ_FLAG_HIDDEN);
+    for (auto* item : annotations_) {
+        lv_obj_add_flag(item, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_text_font(item, &lv_font_montserrat_10, 0);
+        lv_obj_set_style_text_letter_space(item, 0, 0);
+        lv_obj_set_width(item, LV_SIZE_CONTENT);
+        lv_label_set_long_mode(item, LV_LABEL_LONG_CLIP);
+        lv_obj_set_style_text_align(item, LV_TEXT_ALIGN_LEFT, 0);
+    }
     lv_obj_add_flag(leftValue_, LV_OBJ_FLAG_HIDDEN);
     lv_obj_add_flag(rightValue_, LV_OBJ_FLAG_HIDDEN);
     auto annotation = [this](std::size_t index, int x, int y, const char* value,
@@ -280,6 +305,8 @@ void VisualizerUi::updateLabels() {
     lv_obj_set_style_bg_color(styleButton_, kAmber, 0);
     lv_obj_set_style_bg_color(button_, rgb(173, 229, 238), LV_STATE_PRESSED);
     lv_obj_set_style_text_font(leftValue_, &lv_font_montserrat_12, 0);
+    lv_obj_set_width(leftValue_, 205);
+    lv_label_set_long_mode(leftValue_, LV_LABEL_LONG_DOT);
     if (mode_ == Mode::Vu) {
         lv_obj_set_style_text_color(title_, rgb(241, 238, 224), 0);
         lv_obj_set_style_text_color(modeLabel_, rgb(174, 185, 184), 0);
@@ -290,7 +317,7 @@ void VisualizerUi::updateLabels() {
         lv_obj_set_style_text_color(leftValue_, rgb(72, 53, 35), 0);
         lv_obj_set_style_text_color(rightValue_, rgb(72, 53, 35), 0);
         lv_label_set_text(modeLabel_, "ANALOG VU  /  STEREO");
-        lv_label_set_text(pageLabel_, "02 / 03");
+        lv_label_set_text(pageLabel_, "02 / 07");
         for (int side = 0; side < 2; ++side) {
             const int x = side == 0 ? 8 : 165;
             const std::size_t offset = static_cast<std::size_t>(side) * 4;
@@ -369,15 +396,103 @@ void VisualizerUi::updateLabels() {
             annotation(3, 249, 181, "10K", ink);
             annotation(4, 281, 181, "20K", ink);
         }
-    } else {
+    } else if (mode_ == Mode::Scope) {
         lv_label_set_text(title_, "STUDIO MONITOR");
         lv_obj_set_style_text_color(title_, kText, 0);
         lv_obj_set_style_text_color(pageLabel_, rgb(126, 199, 218), 0);
         lv_obj_set_style_bg_color(button_, kCyan, 0);
         lv_label_set_text(modeLabel_, "OSCILLOSCOPE  /  STEREO");
-        lv_label_set_text(pageLabel_, "03 / 03");
+        lv_label_set_text(pageLabel_, "03 / 07");
         annotation(0, 18, 55, "LEFT  /  CH 1", kCyan);
         annotation(1, 18, 131, "RIGHT  /  CH 2", rgb(142, 177, 238));
+    } else {
+        lv_obj_add_flag(modeLabel_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(title_, 16, 14);
+        lv_obj_set_style_text_letter_space(title_, 2, 0);
+        lv_obj_set_style_text_color(title_, kText, 0);
+        lv_obj_set_style_text_color(pageLabel_, rgb(126, 199, 218), 0);
+        lv_obj_set_style_text_color(modeLabel_, rgb(167, 190, 204), 0);
+        lv_obj_set_style_text_color(status_, rgb(142, 169, 182), 0);
+        lv_obj_set_style_text_color(leftValue_, rgb(193, 247, 248), 0);
+        lv_obj_set_style_bg_color(button_, kCyan, 0);
+        if (mode_ == Mode::Market) {
+            lv_label_set_text(title_, "MARKET PULSE");
+            lv_label_set_text(pageLabel_, "24H");
+            lv_obj_set_pos(pageLabel_, 244, 16);
+            lv_obj_set_style_text_font(leftValue_, &lv_font_montserrat_28, 0);
+            lv_obj_set_pos(leftValue_, 17, 73);
+            lv_obj_set_width(leftValue_, 140);
+            lv_obj_clear_flag(leftValue_, LV_OBJ_FLAG_HIDDEN);
+            annotation(0, 18, 57, "BTC", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[0], &lv_font_montserrat_14, 0);
+            annotation(1, 18, 113, "+0.00%", kCyan);
+            lv_obj_set_style_text_font(annotations_[1], &lv_font_montserrat_20, 0);
+            annotation(3, 18, 151, "ETH", rgb(193, 247, 248));
+            annotation(4, 18, 166, "$0", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[4], &lv_font_montserrat_14, 0);
+            annotation(5, 105, 174, "+0.0%", kCyan);
+            annotation(6, 168, 151, "SOL", rgb(193, 247, 248));
+            annotation(7, 168, 166, "$0", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[7], &lv_font_montserrat_14, 0);
+            annotation(8, 255, 174, "+0.0%", kCyan);
+        } else if (mode_ == Mode::Clock) {
+            lv_label_set_text(title_, "STUDIO CLOCK");
+            lv_label_set_text(pageLabel_, "AUDIO / LIVE");
+            lv_obj_set_pos(pageLabel_, 233, 16);
+            lv_obj_set_style_text_font(leftValue_, &lv_font_montserrat_40, 0);
+            lv_obj_set_pos(leftValue_, 17, 61);
+            lv_obj_set_width(leftValue_, 150);
+            lv_obj_clear_flag(leftValue_, LV_OBJ_FLAG_HIDDEN);
+            annotation(0, 20, 108, "--- -- ---", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[0], &lv_font_montserrat_14, 0);
+            lv_obj_set_style_text_letter_space(annotations_[0], 1, 0);
+            annotation(1, 241, 80, "--", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[1], &lv_font_montserrat_20, 0);
+            lv_obj_set_width(annotations_[1], 30);
+            lv_obj_set_style_text_align(annotations_[1], LV_TEXT_ALIGN_CENTER, 0);
+        } else if (mode_ == Mode::NowPlaying) {
+            lv_label_set_text(title_, "NOW PLAYING");
+            lv_label_set_text(pageLabel_, "SOUND / TIME");
+            lv_obj_set_pos(pageLabel_, 226, 16);
+            lv_obj_set_style_text_font(leftValue_,
+                                       &lv_font_montserrat_vietnamese_14, 0);
+            lv_obj_set_pos(leftValue_, 109, 63);
+            lv_obj_set_width(leftValue_, 187);
+            lv_label_set_long_mode(leftValue_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+            lv_obj_set_style_anim_speed(leftValue_, 24, 0);
+            lv_obj_clear_flag(leftValue_, LV_OBJ_FLAG_HIDDEN);
+            annotation(0, 110, 87, "AUDIOVIZ", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[0],
+                                       &lv_font_montserrat_vietnamese_12, 0);
+            lv_obj_set_style_text_letter_space(annotations_[0], 1, 0);
+            lv_obj_set_width(annotations_[0], 186);
+            lv_label_set_long_mode(annotations_[0], LV_LABEL_LONG_SCROLL_CIRCULAR);
+            lv_obj_set_style_anim_speed(annotations_[0], 20, 0);
+            annotation(1, 110, 109, "00:00 / 04:08", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[1], &lv_font_montserrat_12, 0);
+        } else if (mode_ == Mode::DeskBoard) {
+            lv_label_set_text(title_, "DESK BOARD");
+            lv_label_set_text(pageLabel_, "FOCUS / TODAY");
+            lv_obj_set_pos(pageLabel_, 219, 16);
+            lv_obj_set_style_text_font(leftValue_, &lv_font_montserrat_40, 0);
+            lv_obj_set_pos(leftValue_, 17, 61);
+            lv_obj_set_width(leftValue_, 142);
+            lv_obj_clear_flag(leftValue_, LV_OBJ_FLAG_HIDDEN);
+            annotation(0, 20, 108, "--- -- ---", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[0], &lv_font_montserrat_14, 0);
+            lv_obj_set_style_text_letter_space(annotations_[0], 1, 0);
+            annotation(1, 247, 58, "27 C", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[1], &lv_font_montserrat_14, 0);
+            annotation(2, 181, 91, "BTC", rgb(142, 169, 182));
+            annotation(3, 181, 105, "$0", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[3], &lv_font_montserrat_12, 0);
+            annotation(4, 259, 106, "+0.0%", kCyan);
+            annotation(5, 226, 126, "FOCUS", rgb(142, 169, 182));
+            annotation(6, 226, 141, "42 MIN", rgb(193, 247, 248));
+            lv_obj_set_style_text_font(annotations_[6], &lv_font_montserrat_14, 0);
+            annotation(7, 105, 184, "A CALMER DESKTOP", rgb(126, 199, 218));
+            annotation(8, 218, 76, "HANOI", rgb(142, 169, 182));
+        }
     }
 }
 
@@ -1319,8 +1434,11 @@ void VisualizerUi::drawScope(const audio::AudioFrame& frame, bool full) {
     }
 }
 void VisualizerUi::render(const audio::AudioFrame& frame,
-                          const audio::WaveformHistory* waveformHistory) {
+                          const audio::WaveformHistory* waveformHistory,
+                          const data::UtilityFrame* utilityFrame) {
     if (!ready()) return;
+    static const data::UtilityFrame emptyUtility;
+    const data::UtilityFrame& utility = utilityFrame ? *utilityFrame : emptyUtility;
     waveformExternalHistory_ = waveformHistory;
     const bool full = modeChanged_;
     clipArea_ = {0, 0, kWidth - 1, kHeight - 1};
@@ -1332,6 +1450,14 @@ void VisualizerUi::render(const audio::AudioFrame& frame,
     case Mode::Vu: drawVu(frame, full); break;
     case Mode::Spectrum: drawSpectrum(frame, full); break;
     case Mode::Scope: drawScope(frame, full); break;
+    case Mode::Market:
+        if (full || utility.marketGeneration != marketLastGeneration_)
+            drawMarket(utility, full);
+        break;
+    case Mode::Clock: drawClock(frame, utility, full); break;
+    case Mode::NowPlaying: drawNowPlaying(frame, utility, full); break;
+    case Mode::DeskBoard: drawDeskBoard(frame, utility, full); break;
+    case Mode::Count: break;
     }
     if (full) {
         // Repaint button corners against the underlying footer after a palette
@@ -1341,6 +1467,8 @@ void VisualizerUi::render(const audio::AudioFrame& frame,
     }
     shellDrawn_ = true;
     modeChanged_ = false;
+    utilityLastGeneration_ = utility.generation;
+    marketLastGeneration_ = utility.marketGeneration;
     waveformExternalHistory_ = nullptr;
 }
 } // namespace ui

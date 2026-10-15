@@ -15,6 +15,7 @@ struct Options {
     int initialStyle = 0;
     std::string screenshot;
     std::string audioDevice;
+    std::string weatherCity = "Hanoi";
 };
 
 inline bool parseOptions(int argc, char* const argv[], Options& options, std::string& error) {
@@ -28,7 +29,7 @@ inline bool parseOptions(int argc, char* const argv[], Options& options, std::st
             options.help = true;
             return true;
         } else if (option == "--frames" || option == "--mode" || option == "--style" || option == "--screenshot" ||
-                   option == "--audio-device") {
+                   option == "--audio-device" || option == "--weather-city") {
             if (i + 1 >= argc || std::string_view(argv[i + 1]).empty() ||
                 std::string_view(argv[i + 1]).substr(0, 2) == "--") {
                 error = std::string(option) + " requires a value";
@@ -43,16 +44,20 @@ inline bool parseOptions(int argc, char* const argv[], Options& options, std::st
                 options.audioDevice = value;
                 continue;
             }
+            if (option == "--weather-city") {
+                options.weatherCity = value;
+                continue;
+            }
             int number = 0;
             const auto parsed = std::from_chars(value.data(), value.data() + value.size(), number);
             if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||
                 (option == "--frames" && number < 0) ||
-                (option == "--mode" && (number < 1 || number > 3)) ||
+                (option == "--mode" && (number < 1 || number > 7)) ||
                 (option == "--style" && (number < 0 || number > 11))) {
                 error = std::string(option) + (option == "--frames"
                     ? " requires a nonnegative integer (0 means unlimited)"
                     : option == "--style" ? " requires an integer from 0 to 11"
-                    : " requires 1, 2 or 3");
+                    : " requires an integer from 1 to 7");
                 return false;
             }
             if (option == "--frames") options.frameLimit = number;

@@ -22,6 +22,27 @@ add_library(audio_dsp STATIC
 target_include_directories(audio_dsp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(audio_dsp PUBLIC Threads::Threads)
 
+add_library(utility_data STATIC
+    data/MarketDataProvider.cpp
+    data/MediaDataProvider.cpp
+    data/WeatherDataProvider.cpp
+    data/UtilityDataProvider.cpp)
+target_include_directories(utility_data PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(utility_data PUBLIC audio_dsp)
+if(WIN32)
+    target_sources(utility_data PRIVATE
+        data/HttpClientWin.cpp
+        data/MediaSessionWin.cpp)
+    target_link_libraries(utility_data PRIVATE
+        winhttp windowsapp windowscodecs shcore)
+else()
+    find_package(CURL REQUIRED)
+    target_sources(utility_data PRIVATE
+        data/HttpClientCurl.cpp
+        data/MediaSessionStub.cpp)
+    target_link_libraries(utility_data PRIVATE CURL::libcurl)
+endif()
+
 include(CTest)
 if(BUILD_TESTING)
     add_executable(waveform_history_test tests/waveform_history_test.cpp)
@@ -31,6 +52,10 @@ if(BUILD_TESTING)
     add_executable(pc_processor_test tests/pc_processor_test.cpp)
     target_link_libraries(pc_processor_test PRIVATE audio_dsp)
     add_test(NAME pc_processor_test COMMAND pc_processor_test)
+
+    add_executable(utility_data_test tests/utility_data_test.cpp)
+    target_link_libraries(utility_data_test PRIVATE utility_data)
+    add_test(NAME utility_data_test COMMAND utility_data_test)
 endif()
 
 # This explicit test-only path needs neither a GUI toolchain nor downloads.
@@ -90,9 +115,19 @@ add_library(simulator STATIC simulator/Simulator.cpp)
 target_include_directories(simulator PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(simulator PUBLIC lvgl SDL2::SDL2-static)
 
-add_library(visualizer_ui STATIC ui/VisualizerUi.cpp)
+add_library(visualizer_ui STATIC
+    ui/lv_font_montserrat_vietnamese_12.c
+    ui/lv_font_montserrat_vietnamese_14.c
+    ui/VisualizerUi.cpp
+    ui/UtilityModes.cpp)
 target_include_directories(visualizer_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(visualizer_ui PUBLIC lvgl audio_dsp)
+
+if(BUILD_TESTING)
+    add_executable(vietnamese_font_test tests/vietnamese_font_test.cpp)
+    target_link_libraries(vietnamese_font_test PRIVATE visualizer_ui)
+    add_test(NAME vietnamese_font_test COMMAND vietnamese_font_test)
+endif()
 
 if(WIN32)
     enable_language(RC)
@@ -112,7 +147,7 @@ else()
     add_executable(AudioViz_PC main.cpp)
 endif()
 target_link_libraries(AudioViz_PC PRIVATE
-    audio_capture visualizer_ui simulator)
+    audio_capture utility_data visualizer_ui simulator)
 if(MINGW)
     # Ship one viewer executable instead of depending on MinGW runtime DLLs.
     target_link_options(AudioViz_PC PRIVATE -static -static-libgcc -static-libstdc++)
@@ -122,7 +157,7 @@ if(BUILD_TESTING AND BUILD_PORTABLE_DEMO)
     add_executable(audio_capture_demo_test tests/audio_capture_demo_test.cpp)
     target_link_libraries(audio_capture_demo_test PRIVATE audio_capture)
     add_test(NAME audio_capture_demo_test COMMAND audio_capture_demo_test)
-    foreach(mode RANGE 1 3)
+    foreach(mode RANGE 1 7)
         add_test(NAME gui_demo_mode_${mode}
             COMMAND AudioViz_PC --demo --mode ${mode} --frames 6
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/gui-demo-mode-${mode}.bmp)

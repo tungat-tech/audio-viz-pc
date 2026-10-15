@@ -50,12 +50,40 @@ The current macOS builds are unsigned, so first launch may require
 Start the app and play music normally. AudioViz opens in **Spectrum** mode.
 
 - Click **STYLE** to cycle through visual styles.
-- Click **MODE** or press **Space** to switch between Spectrum, VU and
-  Oscilloscope.
+- Click **MODE** or press **Space** to switch between all seven displays.
+- Press a number from **1** to **7** to jump directly to a display.
 - Use `--demo` to explore the interface without an audio source.
 
 Spectrum includes Bars, Trace, Dots, Pulse, Mirror, Waveform, Halo, Waterfall,
 Ridgeline, Topo Bloom, Aurora Weave and Cymatic Mesh.
+
+The utility displays add Market Pulse, Studio Clock, Now Playing and Desk
+Board. Market Pulse and the Desk Board fetch public BTC, ETH and SOL market
+data from Binance every 5 seconds; no account or API key is required. Desk
+Board gets current temperature from Open-Meteo, using Hanoi by default. On
+Windows, Now Playing reads the active system media session exposed by players
+such as Spotify, VLC and supported browsers. It displays the current album art,
+falls back to the AudioViz logo when artwork is unavailable, scrolls long title
+and artist fields inside their panel, and includes Vietnamese glyph coverage.
+Studio Clock uses your computer's local time. `--demo` never contacts the
+network and uses deterministic preview values.
+
+## Utility displays
+
+<table>
+  <tr>
+    <td width="25%"><img src="previews/mode-market-pulse.png" alt="Market Pulse mode"></td>
+    <td width="25%"><img src="previews/mode-studio-clock.png" alt="Studio Clock mode"></td>
+    <td width="25%"><img src="previews/mode-now-playing.png" alt="Now Playing mode"></td>
+    <td width="25%"><img src="previews/mode-desk-board.png" alt="Desk Board mode"></td>
+  </tr>
+  <tr align="center">
+    <td><b>Market Pulse</b></td>
+    <td><b>Studio Clock</b></td>
+    <td><b>Now Playing</b></td>
+    <td><b>Desk Board</b></td>
+  </tr>
+</table>
 
 ## More visual styles
 
@@ -98,12 +126,19 @@ Ridgeline, Topo Bloom, Aurora Weave and Cymatic Mesh.
 AudioViz_PC --demo
 AudioViz_PC --list-audio-devices
 AudioViz_PC --audio-device "device name"
+AudioViz_PC --weather-city "Ho Chi Minh City"
 AudioViz_PC --demo --mode 1 --style 6
 AudioViz_PC --screenshot output.bmp --frames 60
 ```
 
-Modes are `1` Spectrum, `2` VU and `3` Oscilloscope. Spectrum styles use indices
-`0` through `11` in the order listed above.
+Modes are `1` Spectrum, `2` VU, `3` Oscilloscope, `4` Market Pulse, `5` Studio
+Clock, `6` Now Playing and `7` Desk Board. Spectrum styles use indices `0`
+through `11` in the order listed above.
+
+Weather is refreshed every 15 minutes. Use `--weather-city "CITY"` to override
+the default Hanoi location. The app keeps the last successful market/weather
+snapshot and marks it stale when a refresh fails. Now Playing is currently live
+on Windows; Linux and macOS retain the no-session fallback.
 
 ## For developers
 
@@ -132,7 +167,8 @@ Install CMake 3.21+, Ninja and a C/C++ compiler, then run:
 ```
 
 Linux additionally needs the usual SDL development packages and PulseAudio
-headers. The macOS build produces `build/AudioViz_PC.app`.
+headers plus libcurl development headers. The macOS build uses the system curl
+library and produces `build/AudioViz_PC.app`.
 
 </details>
 
