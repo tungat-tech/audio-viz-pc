@@ -36,7 +36,7 @@ Choose the build for your computer from the
 | Platform | Download | Notes |
 | --- | --- | --- |
 | Windows x64 | [EXE](https://github.com/tungat-tech/audio-viz-pc/releases/latest/download/AudioViz-PC-Windows-x64.exe) · [ZIP](https://github.com/tungat-tech/audio-viz-pc/releases/latest/download/AudioViz-PC-Windows-x64.zip) | Captures the default output with WASAPI loopback |
-| Linux x64 | [tar.gz](https://github.com/tungat-tech/audio-viz-pc/releases/latest/download/AudioViz-PC-Linux-x64.tar.gz) | Uses the default PulseAudio/PipeWire monitor |
+| Linux x64 | [Executable](https://github.com/tungat-tech/audio-viz-pc/releases/latest/download/AudioViz-PC-Linux-x64) · [tar.gz](https://github.com/tungat-tech/audio-viz-pc/releases/latest/download/AudioViz-PC-Linux-x64.tar.gz) | Uses the default PulseAudio/PipeWire monitor |
 | macOS Apple Silicon | [.app.zip](https://github.com/tungat-tech/audio-viz-pc/releases/latest/download/AudioViz-PC-macOS-arm64.app.zip) | Requires a loopback input such as BlackHole |
 | macOS Intel | [.app.zip](https://github.com/tungat-tech/audio-viz-pc/releases/latest/download/AudioViz-PC-macOS-x64.app.zip) | Requires a loopback input such as BlackHole |
 
