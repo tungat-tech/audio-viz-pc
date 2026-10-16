@@ -51,6 +51,11 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    add_executable(ui_contract_test tests/ui_contract_test.cpp)
+    target_include_directories(ui_contract_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/libs/audioviz-ui)
+    add_test(NAME ui_contract_test COMMAND ui_contract_test)
+
     add_executable(waveform_history_test tests/waveform_history_test.cpp)
     target_include_directories(waveform_history_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     add_test(NAME waveform_history_test COMMAND waveform_history_test)

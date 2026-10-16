@@ -3,6 +3,7 @@
 #include "audio/AudioFrame.hpp"
 #include "audio/WaveformHistory.hpp"
 #include "data/UtilityFrame.hpp"
+#include "ui/UiContract.hpp"
 #include <lvgl.h>
 #include <array>
 #include <cstddef>
@@ -14,10 +15,7 @@ namespace ui {
 
 class VisualizerUi {
 public:
-    enum class SpectrumStyle : std::uint8_t {
-        Bars = 0, Trace, Dots, NeonPulse, Mirror, Waveform, Oscilloscope, Halo,
-        Waterfall, Ridgeline, TopoBloom, AuroraWeave, CymaticMesh, Count
-    };
+    using SpectrumStyle = SpectrumStyleId;
     enum class TouchAction : std::uint8_t { NextMode, NextSpectrumStyle };
     using TouchActionHandler = void (*)(void*, TouchAction);
     enum class CanvasStorage { Indexed8 };
@@ -43,9 +41,14 @@ public:
     bool ready() const { return canvas_ != nullptr; }
     void nextMode();
     void setMode(unsigned oneBasedMode);
+    void setModeId(ModeId mode);
+    ModeId modeId() const { return mode_; }
+    void setCapabilities(UiCapabilities capabilities);
+    const UiCapabilities& capabilities() const { return capabilities_; }
     // Optional application-level handler; built-in behavior remains available.
     void setTouchActionHandler(TouchActionHandler handler, void* context);
     void setSpectrumStyle(SpectrumStyle style);
+    void nextSpectrumStyle();
     SpectrumStyle spectrumStyle() const { return spectrumStyle_; }
     void setStatus(const std::string& status);
     void render(const audio::AudioFrame& frame,
@@ -61,9 +64,6 @@ public:
     std::size_t directDirtyCount() const { return directDirtyCount_; }
 
 private:
-    enum class Mode {
-        Spectrum = 0, Vu, Scope, Market, Clock, NowPlaying, DeskBoard, Count
-    };
     struct MeterState {
         int tipX = 0;
         int tipY = 0;
@@ -135,7 +135,8 @@ private:
     lv_obj_t* leftValue_ = nullptr;
     lv_obj_t* rightValue_ = nullptr;
     std::string statusText_ = "STARTING AUDIO";
-    Mode mode_ = Mode::NowPlaying;
+    UiCapabilities capabilities_{};
+    ModeId mode_ = ModeId::NowPlaying;
     SpectrumStyle spectrumStyle_ = SpectrumStyle::Bars;
     bool shellDrawn_ = false;
     bool modeChanged_ = true;

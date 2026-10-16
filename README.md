@@ -147,6 +147,18 @@ AudioViz PC uses C++17, SDL2, LVGL and miniaudio. The shared UI Core is included
 under `libs/audioviz-ui`; third-party dependencies are pinned and downloaded
 automatically during the first configure.
 
+### UI Core compatibility contract
+
+`libs/audioviz-ui/ui/UiContract.hpp` is the stable boundary used by desktop
+and embedded consumers. `ModeId` and `SpectrumStyleId` values are persistent
+identifiers, not screen positions: existing values must never be renumbered or
+reused. Navigation order is defined separately by `kVisibleModeOrder`, while
+`UiCapabilities` lets a constrained consumer hide unsupported modes/styles
+without forking the renderer. Increment `kUiContractVersion` only when an
+existing identifier changes meaning or another consumer-visible contract
+becomes incompatible; layout, color and compatible additions do not require a
+version bump.
+
 <details>
 <summary><b>Build on Windows</b></summary>
 

@@ -297,8 +297,7 @@ void VisualizerUi::dispatchTouchAction(TouchAction action) {
     } else if (action == TouchAction::NextMode) {
         nextMode();
     } else {
-        setSpectrumStyle(static_cast<SpectrumStyle>(
-            (static_cast<int>(spectrumStyle_) + 1) % static_cast<int>(SpectrumStyle::Count)));
+        nextSpectrumStyle();
     }
 }
 void VisualizerUi::setTouchActionHandler(TouchActionHandler handler, void* context) {
@@ -307,40 +306,39 @@ void VisualizerUi::setTouchActionHandler(TouchActionHandler handler, void* conte
 }
 void VisualizerUi::nextMode() {
     if (!ready()) return;
+    setModeId(nextSupportedMode(mode_, capabilities_));
+}
+void VisualizerUi::setModeId(ModeId mode) {
+    if (!ready() || !capabilities_.supports(mode) || mode == mode_) return;
+    mode_ = mode;
     modeChanged_ = true;
-    // VU is temporarily hidden and Scope lives under Spectrum styles. Keep
-    // both renderers compiled so this information architecture is reversible.
-    switch (mode_) {
-    case Mode::NowPlaying: mode_ = Mode::Spectrum; break;
-    case Mode::Spectrum: mode_ = Mode::Clock; break;
-    case Mode::Clock: mode_ = Mode::Market; break;
-    case Mode::Market: mode_ = Mode::DeskBoard; break;
-    default: mode_ = Mode::NowPlaying; break;
-    }
-    if (mode_ == Mode::Spectrum && spectrumStyle_ == SpectrumStyle::Waveform)
+    if (mode_ == ModeId::Spectrum && spectrumStyle_ == SpectrumStyle::Waveform)
         resetWaveform();
     updateLabels();
 }
 void VisualizerUi::setMode(unsigned oneBasedMode) {
-    if (!ready() || oneBasedMode == 0 || oneBasedMode > 5) return;
-    static constexpr std::array<Mode, 5> visibleModes{
-        Mode::NowPlaying, Mode::Spectrum, Mode::Clock, Mode::Market, Mode::DeskBoard};
-    const Mode next = visibleModes[oneBasedMode - 1];
-    if (next == mode_) return;
-    mode_ = next;
+    if (oneBasedMode == 0 || oneBasedMode > kVisibleModeOrder.size()) return;
+    setModeId(kVisibleModeOrder[oneBasedMode - 1]);
+}
+void VisualizerUi::setCapabilities(UiCapabilities capabilities) {
+    capabilities_ = capabilities;
+    if (!capabilities_.supports(mode_)) mode_ = firstSupportedMode(capabilities_);
+    if (!capabilities_.supports(spectrumStyle_))
+        spectrumStyle_ = firstSupportedSpectrumStyle(capabilities_);
     modeChanged_ = true;
-    if (mode_ == Mode::Spectrum && spectrumStyle_ == SpectrumStyle::Waveform)
-        resetWaveform();
-    updateLabels();
+    if (ready()) updateLabels();
 }
 void VisualizerUi::setSpectrumStyle(SpectrumStyle style) {
-    if (!ready() || style == spectrumStyle_ || style >= SpectrumStyle::Count) return;
+    if (!ready() || style == spectrumStyle_ || !capabilities_.supports(style)) return;
     spectrumStyle_ = style;
     modeChanged_ = true;
     if (style == SpectrumStyle::Waveform) resetWaveform();
     if (style == SpectrumStyle::Waterfall || style == SpectrumStyle::Ridgeline)
         resetSpectrumHistory();
-    if (mode_ == Mode::Spectrum) updateLabels();
+    if (mode_ == ModeId::Spectrum) updateLabels();
+}
+void VisualizerUi::nextSpectrumStyle() {
+    setSpectrumStyle(ui::nextSupportedSpectrumStyle(spectrumStyle_, capabilities_));
 }
 void VisualizerUi::setStatus(const std::string& status) {
     // LV_LABEL_LONG_DOT edits its own text while truncating. Cache the original
@@ -384,7 +382,7 @@ void VisualizerUi::updateLabels() {
     lv_obj_set_style_text_font(leftValue_, &lv_font_montserrat_12, 0);
     lv_obj_set_width(leftValue_, 205);
     lv_label_set_long_mode(leftValue_, LV_LABEL_LONG_DOT);
-    if (mode_ == Mode::Vu) {
+    if (mode_ == ModeId::Vu) {
         lv_obj_set_style_text_color(title_, rgb(241, 238, 224), 0);
         lv_obj_set_style_text_color(modeLabel_, rgb(174, 185, 184), 0);
         lv_obj_set_style_text_color(pageLabel_, rgb(215, 171, 105), 0);
@@ -411,7 +409,7 @@ void VisualizerUi::updateLabels() {
         lv_obj_set_pos(rightValue_, 188, 178);
         lv_obj_clear_flag(leftValue_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(rightValue_, LV_OBJ_FLAG_HIDDEN);
-    } else if (mode_ == Mode::Spectrum) {
+    } else if (mode_ == ModeId::Spectrum) {
         lv_obj_set_style_text_color(pageLabel_, rgb(126, 199, 218), 0);
         lv_obj_set_style_text_color(modeLabel_, rgb(167, 190, 204), 0);
         lv_obj_set_style_bg_color(button_, kCyan, 0);
@@ -476,7 +474,7 @@ void VisualizerUi::updateLabels() {
             annotation(3, 249, 181, "10K", ink);
             annotation(4, 281, 181, "20K", ink);
         }
-    } else if (mode_ == Mode::Scope) {
+    } else if (mode_ == ModeId::LegacyScope) {
         lv_label_set_text(title_, "STUDIO MONITOR");
         lv_obj_set_style_text_color(title_, kText, 0);
         lv_obj_set_style_text_color(pageLabel_, rgb(126, 199, 218), 0);
@@ -495,7 +493,7 @@ void VisualizerUi::updateLabels() {
         lv_obj_set_style_text_color(status_, rgb(142, 169, 182), 0);
         lv_obj_set_style_text_color(leftValue_, rgb(193, 247, 248), 0);
         lv_obj_set_style_bg_color(button_, kCyan, 0);
-        if (mode_ == Mode::Market) {
+        if (mode_ == ModeId::Market) {
             lv_label_set_text(title_, "MARKET PULSE");
             lv_label_set_text(pageLabel_, "24H");
             lv_obj_set_pos(pageLabel_, 244, 16);
@@ -515,7 +513,7 @@ void VisualizerUi::updateLabels() {
             annotation(7, 168, 166, "$0", rgb(193, 247, 248));
             lv_obj_set_style_text_font(annotations_[7], &lv_font_montserrat_14, 0);
             annotation(8, 255, 174, "+0.0%", kCyan);
-        } else if (mode_ == Mode::Clock) {
+        } else if (mode_ == ModeId::Clock) {
             lv_label_set_text(title_, "STUDIO CLOCK");
             lv_label_set_text(pageLabel_, "AUDIO / LIVE");
             lv_obj_set_pos(pageLabel_, 233, 16);
@@ -530,7 +528,7 @@ void VisualizerUi::updateLabels() {
             lv_obj_set_style_text_font(annotations_[1], &lv_font_montserrat_20, 0);
             lv_obj_set_width(annotations_[1], 30);
             lv_obj_set_style_text_align(annotations_[1], LV_TEXT_ALIGN_CENTER, 0);
-        } else if (mode_ == Mode::NowPlaying) {
+        } else if (mode_ == ModeId::NowPlaying) {
             lv_label_set_text(title_, "NOW PLAYING");
             lv_label_set_text(pageLabel_, "SOUND / TIME");
             lv_obj_set_pos(pageLabel_, 226, 16);
@@ -550,7 +548,7 @@ void VisualizerUi::updateLabels() {
             lv_obj_set_style_anim_speed(annotations_[0], 20, 0);
             annotation(1, 110, 109, "00:00 / 04:08", rgb(193, 247, 248));
             lv_obj_set_style_text_font(annotations_[1], &lv_font_montserrat_12, 0);
-        } else if (mode_ == Mode::DeskBoard) {
+        } else if (mode_ == ModeId::DeskBoard) {
             lv_label_set_text(title_, "DESK BOARD");
             lv_label_set_text(pageLabel_, "FOCUS / TODAY");
             lv_obj_set_pos(pageLabel_, 219, 16);
@@ -659,9 +657,9 @@ void VisualizerUi::invalidate(const lv_area_t& area) {
         spectrumStyle_ == SpectrumStyle::TopoBloom ||
         spectrumStyle_ == SpectrumStyle::AuroraWeave ||
         spectrumStyle_ == SpectrumStyle::CymaticMesh;
-    const bool directRegion = (mode_ == Mode::Spectrum && directStyle) ||
-        (mode_ == Mode::Clock && area.y1 >= 129) ||
-        (mode_ == Mode::DeskBoard && area.y1 >= 152 && area.y2 <= 182);
+    const bool directRegion = (mode_ == ModeId::Spectrum && directStyle) ||
+        (mode_ == ModeId::Clock && area.y1 >= 129) ||
+        (mode_ == ModeId::DeskBoard && area.y1 >= 152 && area.y2 <= 182);
     if (directCanvasUpdates_ && !modeChanged_ && directRegion &&
         directDirtyCount_ < directDirtyAreas_.size()) {
         directDirtyAreas_[directDirtyCount_++] = area;
@@ -1614,7 +1612,7 @@ void VisualizerUi::drawScope(const audio::AudioFrame& frame, bool full) {
         waveY_[channel] = next;
         drawScopeTrace(channel);
         if (!full) {
-            if (directCanvasUpdates_ && mode_ == Mode::Spectrum &&
+            if (directCanvasUpdates_ && mode_ == ModeId::Spectrum &&
                 spectrumStyle_ == SpectrumStyle::Oscilloscope)
                 invalidateTiled(clipArea_);
             else
@@ -1637,17 +1635,16 @@ void VisualizerUi::render(const audio::AudioFrame& frame,
         else rect(0, 44, kWidth, 157, rgb(9, 20, 31));
     }
     switch (mode_) {
-    case Mode::Vu: drawVu(frame, full); break;
-    case Mode::Spectrum: drawSpectrum(frame, full); break;
-    case Mode::Scope: drawScope(frame, full); break;
-    case Mode::Market:
+    case ModeId::Vu: drawVu(frame, full); break;
+    case ModeId::Spectrum: drawSpectrum(frame, full); break;
+    case ModeId::LegacyScope: drawScope(frame, full); break;
+    case ModeId::Market:
         if (full || utility.marketGeneration != marketLastGeneration_)
             drawMarket(utility, full);
         break;
-    case Mode::Clock: drawClock(frame, utility, full); break;
-    case Mode::NowPlaying: drawNowPlaying(frame, utility, full); break;
-    case Mode::DeskBoard: drawDeskBoard(frame, utility, full); break;
-    case Mode::Count: break;
+    case ModeId::Clock: drawClock(frame, utility, full); break;
+    case ModeId::NowPlaying: drawNowPlaying(frame, utility, full); break;
+    case ModeId::DeskBoard: drawDeskBoard(frame, utility, full); break;
     }
     if (full) {
         // Repaint button corners against the underlying footer after a palette
