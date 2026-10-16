@@ -32,11 +32,11 @@ int main(int argc, char** argv) {
         return 2;
     }
     if (options.help) {
-        std::cout << "AudioViz_PC [--demo] [--mode 1..7] [--style 0..11] [--frames N]"
+        std::cout << "AudioViz_PC [--demo] [--mode 1..5] [--style 0..12] [--frames N]"
                      " [--screenshot FILE.bmp]"
                      " [--audio-device NAME] [--weather-city CITY] [--list-audio-devices]\n"
-                     "Modes: 1 Spectrum (default), 2 VU, 3 Oscilloscope, 4 Market Pulse,\n"
-                     "       5 Studio Clock, 6 Now Playing, 7 Desk Board.\n"
+                     "Modes: 1 Now Playing (default), 2 Spectrum, 3 Studio Clock,\n"
+                     "       4 Market Pulse, 5 Desk Board. Oscilloscope is a Spectrum style.\n"
                      "N is nonnegative; 0 runs until the window is closed.\n"
                      "Screenshots are saved on exit.\n";
         return 0;
@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
             if (event.type == SDL_QUIT) running = false;
             if (event.type == SDL_KEYDOWN && !event.key.repeat) {
                 if (event.key.keysym.sym == SDLK_SPACE) interface.nextMode();
-                else if (event.key.keysym.sym >= SDLK_1 && event.key.keysym.sym <= SDLK_7)
+                else if (event.key.keysym.sym >= SDLK_1 && event.key.keysym.sym <= SDLK_5)
                     interface.setMode(static_cast<unsigned>(event.key.keysym.sym - SDLK_0));
             }
         }

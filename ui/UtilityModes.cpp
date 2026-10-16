@@ -14,6 +14,19 @@ namespace ui {
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
 
+float fastUtilitySin(float angle) {
+    static const auto table = [] {
+        std::array<float, 256> values{};
+        for (std::size_t i = 0; i < values.size(); ++i)
+            values[i] = std::sin(2.0f * kPi * static_cast<float>(i) /
+                                 static_cast<float>(values.size()));
+        return values;
+    }();
+    constexpr float toIndex = 256.0f / (2.0f * kPi);
+    const auto index = static_cast<unsigned>(static_cast<int>(angle * toIndex));
+    return table[index & 255U];
+}
+
 lv_color_t color(int r, int g, int b) {
     return lv_color_make(static_cast<std::uint8_t>(r),
                          static_cast<std::uint8_t>(g),
@@ -143,40 +156,51 @@ void VisualizerUi::drawMarket(const data::UtilityFrame& utility, bool full) {
 
 void VisualizerUi::drawClock(const audio::AudioFrame& frame,
                              const data::UtilityFrame& utility, bool full) {
-    (void)full;
-    drawUtilityPanel();
+    const bool utilityChanged = utility.generation != utilityLastGeneration_;
+    if (full) drawUtilityPanel();
     updateLabel(leftValue_, utility.time);
     updateLabel(annotations_[0], utility.date);
     updateLabel(annotations_[1], utility.seconds);
 
-    const int seconds = std::clamp(std::atoi(utility.seconds.c_str()), 0, 59);
-    constexpr int cx = 256;
-    constexpr int cy = 91;
-    for (int tick = 0; tick < 60; ++tick) {
-        const float angle = (static_cast<float>(tick) / 60.0f * 2.0f * kPi) - kPi * 0.5f;
-        const int inner = tick % 5 == 0 ? 29 : 31;
-        const int outer = 35;
-        const auto ink = tick <= seconds
-            ? (tick > 48 ? color(126, 112, 232) : kCyan)
-            : color(27, 65, 87);
-        line(cx + static_cast<int>(std::cos(angle) * inner),
-             cy + static_cast<int>(std::sin(angle) * inner),
-             cx + static_cast<int>(std::cos(angle) * outer),
-             cy + static_cast<int>(std::sin(angle) * outer), ink);
+    if (full || utilityChanged) {
+        if (!full) rect(218, 54, 77, 75, kPanel);
+        const int seconds = std::clamp(std::atoi(utility.seconds.c_str()), 0, 59);
+        constexpr int cx = 256;
+        constexpr int cy = 91;
+        for (int tick = 0; tick < 60; ++tick) {
+            const float angle = (static_cast<float>(tick) / 60.0f * 2.0f * kPi) - kPi * 0.5f;
+            const int inner = tick % 5 == 0 ? 29 : 31;
+            const int outer = 35;
+            const auto ink = tick <= seconds
+                ? (tick > 48 ? color(126, 112, 232) : kCyan)
+                : color(27, 65, 87);
+            line(cx + static_cast<int>(std::cos(angle) * inner),
+                 cy + static_cast<int>(std::sin(angle) * inner),
+                 cx + static_cast<int>(std::cos(angle) * outer),
+                 cy + static_cast<int>(std::sin(angle) * outer), ink);
+        }
+        if (!full) invalidate({218, 54, 294, 128});
     }
     constexpr int baseline = 163;
+    if (!full) rect(17, 129, 287, 47, kPanel);
     line(17, baseline, 303, baseline, color(31, 70, 91));
     const float activity = frame.hasAudio
         ? std::clamp(frame.visualActivity, 0.0f, 1.0f) : 0.0f;
+    static const auto packets = [] {
+        std::array<float, audio::kBandCount> result{};
+        for (std::size_t band = 0; band < result.size(); ++band) {
+            const float t = static_cast<float>(band) /
+                            static_cast<float>(audio::kBandCount - 1);
+            result[band] = std::exp(-std::pow((t - 0.18f) / 0.13f, 2.0f)) +
+                0.72f * std::exp(-std::pow((t - 0.52f) / 0.11f, 2.0f)) +
+                0.90f * std::exp(-std::pow((t - 0.83f) / 0.10f, 2.0f));
+        }
+        return result;
+    }();
     for (std::size_t band = 0; band < audio::kBandCount; ++band) {
         const int x = 18 + static_cast<int>(band) * 12;
-        const float t = static_cast<float>(band) /
-                        static_cast<float>(audio::kBandCount - 1);
-        const float packet = std::exp(-std::pow((t - 0.18f) / 0.13f, 2.0f)) +
-                             0.72f * std::exp(-std::pow((t - 0.52f) / 0.11f, 2.0f)) +
-                             0.90f * std::exp(-std::pow((t - 0.83f) / 0.10f, 2.0f));
         const float shaped = std::clamp(frame.bands[band], 0.0f, 1.0f);
-        const float display = std::clamp(shaped * 0.68f + packet * activity * 0.32f,
+        const float display = std::clamp(shaped * 0.68f + packets[band] * activity * 0.32f,
                                          0.0f, 1.0f);
         const int height = 2 + static_cast<int>(display * 31.0f);
         const auto ink = band < 8 || band > 18 ? kCyan : color(118, 102, 235);
@@ -184,7 +208,8 @@ void VisualizerUi::drawClock(const audio::AudioFrame& frame,
         rect(x, baseline + 2, 6, std::max(1, height / 3),
              band < 8 || band > 18 ? color(31, 83, 112) : color(45, 48, 119));
     }
-    invalidate({8, 48, 311, 197});
+    invalidate(full ? lv_area_t{8, 48, 311, 197}
+                    : lv_area_t{17, 129, 303, 175});
 }
 
 void VisualizerUi::drawNowPlaying(const audio::AudioFrame& frame,
@@ -234,15 +259,21 @@ void VisualizerUi::drawNowPlaying(const audio::AudioFrame& frame,
     constexpr int baseline = 181;
     const float activity = frame.hasAudio
         ? std::clamp(frame.visualActivity, 0.0f, 1.0f) : 0.0f;
+    static const auto packets = [] {
+        std::array<float, audio::kBandCount> result{};
+        for (std::size_t band = 0; band < result.size(); ++band) {
+            const float t = static_cast<float>(band) /
+                            static_cast<float>(audio::kBandCount - 1);
+            result[band] = 0.65f * std::exp(-std::pow((t - 0.20f) / 0.16f, 2.0f)) +
+                std::exp(-std::pow((t - 0.50f) / 0.13f, 2.0f)) +
+                0.72f * std::exp(-std::pow((t - 0.78f) / 0.14f, 2.0f));
+        }
+        return result;
+    }();
     for (std::size_t band = 0; band < audio::kBandCount; ++band) {
         const int x = 18 + static_cast<int>(band) * 12;
-        const float t = static_cast<float>(band) /
-                        static_cast<float>(audio::kBandCount - 1);
-        const float packet = 0.65f * std::exp(-std::pow((t - 0.20f) / 0.16f, 2.0f)) +
-                             std::exp(-std::pow((t - 0.50f) / 0.13f, 2.0f)) +
-                             0.72f * std::exp(-std::pow((t - 0.78f) / 0.14f, 2.0f));
         const float display = std::clamp(frame.bands[band] * 0.72f +
-                                         packet * activity * 0.28f, 0.0f, 1.0f);
+                                         packets[band] * activity * 0.28f, 0.0f, 1.0f);
         const int height = 2 + static_cast<int>(display * 31.0f);
         const auto ink = band < 9 ? kCyan : color(111, 99, 235);
         rect(x, baseline - height, 7, height, ink);
@@ -253,8 +284,8 @@ void VisualizerUi::drawNowPlaying(const audio::AudioFrame& frame,
 
 void VisualizerUi::drawDeskBoard(const audio::AudioFrame& frame,
                                  const data::UtilityFrame& utility, bool full) {
-    (void)full;
-    drawUtilityPanel();
+    const bool utilityChanged = utility.generation != utilityLastGeneration_;
+    if (full) drawUtilityPanel();
     updateLabel(leftValue_, utility.time);
     updateLabel(annotations_[0], utility.date);
     updateLabel(annotations_[1], utility.temperature);
@@ -271,36 +302,43 @@ void VisualizerUi::drawDeskBoard(const audio::AudioFrame& frame,
     std::snprintf(text, sizeof(text), "%d MIN", utility.focusMinutes);
     updateLabel(annotations_[6], text);
 
-    line(160, 56, 160, 151, kGrid);
-    line(172, 87, 301, 87, kGrid);
-    line(172, 120, 301, 120, kGrid);
+    if (full) {
+        line(160, 56, 160, 151, kGrid);
+        line(172, 87, 301, 87, kGrid);
+        line(172, 120, 301, 120, kGrid);
 
-    // Compact vector cloud following the reference card's outlined icon.
-    line(174, 77, 207, 77, kCyan);
-    line(174, 77, 171, 73, kCyan);
-    line(171, 73, 172, 68, kCyan);
-    line(172, 68, 177, 65, kCyan);
-    line(177, 65, 183, 66, kCyan);
-    line(183, 66, 187, 60, kCyan);
-    line(187, 60, 194, 58, kCyan);
-    line(194, 58, 201, 61, kCyan);
-    line(201, 61, 204, 67, kCyan);
-    line(204, 67, 209, 69, kCyan);
-    line(209, 69, 210, 73, kCyan);
-    line(210, 73, 207, 77, kCyan);
+        // Compact vector cloud following the reference card's outlined icon.
+        line(174, 77, 207, 77, kCyan);
+        line(174, 77, 171, 73, kCyan);
+        line(171, 73, 172, 68, kCyan);
+        line(172, 68, 177, 65, kCyan);
+        line(177, 65, 183, 66, kCyan);
+        line(183, 66, 187, 60, kCyan);
+        line(187, 60, 194, 58, kCyan);
+        line(194, 58, 201, 61, kCyan);
+        line(201, 61, 204, 67, kCyan);
+        line(204, 67, 209, 69, kCyan);
+        line(209, 69, 210, 73, kCyan);
+        line(210, 73, 207, 77, kCyan);
+    }
 
     // Focus ring communicates remaining time with geometry as well as text.
     constexpr int cx = 194;
     constexpr int cy = 138;
-    for (int segment = 0; segment < 24; ++segment) {
-        const float angle = segment * 2.0f * kPi / 24.0f - kPi * 0.5f;
-        const auto ink = segment < utility.focusMinutes * 24 / 42
-            ? kCyan : color(30, 67, 91);
-        pixel(cx + static_cast<int>(std::cos(angle) * 13),
-              cy + static_cast<int>(std::sin(angle) * 13), ink);
-        pixel(cx + static_cast<int>(std::cos(angle) * 14),
-              cy + static_cast<int>(std::sin(angle) * 14), ink);
+    if (full || utilityChanged) {
+        if (!full) rect(178, 122, 33, 33, kPanel);
+        for (int segment = 0; segment < 24; ++segment) {
+            const float angle = segment * 2.0f * kPi / 24.0f - kPi * 0.5f;
+            const auto ink = segment < utility.focusMinutes * 24 / 42
+                ? kCyan : color(30, 67, 91);
+            pixel(cx + static_cast<int>(std::cos(angle) * 13),
+                  cy + static_cast<int>(std::sin(angle) * 13), ink);
+            pixel(cx + static_cast<int>(std::cos(angle) * 14),
+                  cy + static_cast<int>(std::sin(angle) * 14), ink);
+        }
+        if (!full) invalidate({178, 122, 210, 154});
     }
+    if (!full) rect(17, 152, 287, 31, kPanel);
     const float bass = (frame.bands[0] + frame.bands[1] + frame.bands[2]) / 3.0f;
     const float mid = (frame.bands[8] + frame.bands[10] + frame.bands[12]) / 3.0f;
     const float phase = static_cast<float>(frame.generation % 10000) * 0.035f;
@@ -311,19 +349,23 @@ void VisualizerUi::drawDeskBoard(const audio::AudioFrame& frame,
     int previousViolet = 168;
     for (int x = 18; x <= 303; ++x) {
         const float t = static_cast<float>(x - 17) / 286.0f;
-        const int cyanY = 168 + static_cast<int>(std::sin(t * kPi * 7.0f + phase) *
-                                                     cyanAmplitude * std::sin(t * kPi));
-        const int violetY = 168 + static_cast<int>(std::sin(t * kPi * 4.2f - phase * 0.55f) *
-                                                       violetAmplitude * std::sin(t * kPi));
+        const float envelope = fastUtilitySin(t * kPi);
+        const int cyanY = 168 + static_cast<int>(fastUtilitySin(t * kPi * 7.0f + phase) *
+                                                     cyanAmplitude * envelope);
+        const int violetY = 168 + static_cast<int>(fastUtilitySin(t * kPi * 4.2f - phase * 0.55f) *
+                                                       violetAmplitude * envelope);
         line(previousX, previousViolet, x, violetY, kViolet);
         line(previousX, previousCyan, x, cyanY, kCyan);
         previousX = x;
         previousCyan = cyanY;
         previousViolet = violetY;
     }
-    line(17, 190, 94, 190, color(45, 105, 129));
-    line(225, 190, 303, 190, color(45, 105, 129));
-    invalidate({8, 48, 311, 197});
+    if (full) {
+        line(17, 190, 94, 190, color(45, 105, 129));
+        line(225, 190, 303, 190, color(45, 105, 129));
+    }
+    invalidate(full ? lv_area_t{8, 48, 311, 197}
+                    : lv_area_t{17, 152, 303, 182});
 }
 
 } // namespace ui

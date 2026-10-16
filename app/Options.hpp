@@ -52,12 +52,12 @@ inline bool parseOptions(int argc, char* const argv[], Options& options, std::st
             const auto parsed = std::from_chars(value.data(), value.data() + value.size(), number);
             if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size() ||
                 (option == "--frames" && number < 0) ||
-                (option == "--mode" && (number < 1 || number > 7)) ||
-                (option == "--style" && (number < 0 || number > 11))) {
+                (option == "--mode" && (number < 1 || number > 5)) ||
+                (option == "--style" && (number < 0 || number > 12))) {
                 error = std::string(option) + (option == "--frames"
                     ? " requires a nonnegative integer (0 means unlimited)"
-                    : option == "--style" ? " requires an integer from 0 to 11"
-                    : " requires an integer from 1 to 7");
+                    : option == "--style" ? " requires an integer from 0 to 12"
+                    : " requires an integer from 1 to 5");
                 return false;
             }
             if (option == "--frames") options.frameLimit = number;

@@ -110,6 +110,7 @@ const char* spectrumStyleName(VisualizerUi::SpectrumStyle style) {
     case VisualizerUi::SpectrumStyle::NeonPulse: return "PULSE";
     case VisualizerUi::SpectrumStyle::Mirror: return "MIRROR";
     case VisualizerUi::SpectrumStyle::Waveform: return "WAVEFORM";
+    case VisualizerUi::SpectrumStyle::Oscilloscope: return "SCOPE";
     case VisualizerUi::SpectrumStyle::Halo: return "HALO";
     case VisualizerUi::SpectrumStyle::Waterfall: return "WATERFALL";
     case VisualizerUi::SpectrumStyle::Ridgeline: return "RIDGELINE";
@@ -241,16 +242,22 @@ void VisualizerUi::setTouchActionHandler(TouchActionHandler handler, void* conte
 void VisualizerUi::nextMode() {
     if (!ready()) return;
     modeChanged_ = true;
-    mode_ = static_cast<Mode>((static_cast<int>(mode_) + 1) %
-                              static_cast<int>(Mode::Count));
+    switch (mode_) {
+    case Mode::NowPlaying: mode_ = Mode::Spectrum; break;
+    case Mode::Spectrum: mode_ = Mode::Clock; break;
+    case Mode::Clock: mode_ = Mode::Market; break;
+    case Mode::Market: mode_ = Mode::DeskBoard; break;
+    default: mode_ = Mode::NowPlaying; break;
+    }
     if (mode_ == Mode::Spectrum && spectrumStyle_ == SpectrumStyle::Waveform)
         resetWaveform();
     updateLabels();
 }
 void VisualizerUi::setMode(unsigned oneBasedMode) {
-    if (!ready() || oneBasedMode == 0 ||
-        oneBasedMode > static_cast<unsigned>(Mode::Count)) return;
-    const Mode next = static_cast<Mode>(oneBasedMode - 1);
+    if (!ready() || oneBasedMode == 0 || oneBasedMode > 5) return;
+    static constexpr std::array<Mode, 5> visibleModes{
+        Mode::NowPlaying, Mode::Spectrum, Mode::Clock, Mode::Market, Mode::DeskBoard};
+    const Mode next = visibleModes[oneBasedMode - 1];
     if (next == mode_) return;
     mode_ = next;
     modeChanged_ = true;
@@ -357,6 +364,8 @@ void VisualizerUi::updateLabels() {
             annotation(0, 17, 57, "LIVE AUDIO  /  PEAK ENVELOPE", palette.peak);
             annotation(1, 17, 181, "ROLLING HISTORY", rgb(142, 169, 182));
             annotation(2, 272, 181, "TIME >", rgb(142, 169, 182));
+        } else if (spectrumStyle_ == SpectrumStyle::Oscilloscope) {
+            // The trace panels intentionally remain label-free.
         } else if (spectrumStyle_ == SpectrumStyle::Halo) {
             annotation(0, 17, 57, "RADIAL / LIVE", rgb(193, 247, 248));
             annotation(1, 17, 181, "LOW  /  HIGH  /  LOW", rgb(142, 169, 182));
@@ -697,6 +706,10 @@ void VisualizerUi::drawSpectrumTrace() {
 void VisualizerUi::drawSpectrum(const audio::AudioFrame& frame, bool full) {
     if (spectrumStyle_ == SpectrumStyle::Waveform) {
         drawWaveform(frame, full);
+        return;
+    }
+    if (spectrumStyle_ == SpectrumStyle::Oscilloscope) {
+        drawScope(frame, full);
         return;
     }
     if (spectrumStyle_ == SpectrumStyle::Halo) {
@@ -1318,20 +1331,20 @@ void VisualizerUi::drawWaveform(const audio::AudioFrame& frame, bool full) {
             waveformLastHistorySequence_ = waveformExternalHistory_->sequence;
         } else {
             float peak = 0.0f, sumSquares = 0.0f;
+            const float leftScale = frame.scopeScale[0] >= 0.0f ? frame.scopeScale[0] : 48.0f;
+            const float rightScale = frame.scopeScale[1] >= 0.0f ? frame.scopeScale[1] : 48.0f;
             for (std::size_t i = 0; i < audio::kWavePoints; ++i) {
-                const float sample = std::max(std::abs(frame.leftWave[i]),
-                                              std::abs(frame.rightWave[i]));
+                const float sample = std::max(std::abs(frame.leftWave[i]) * leftScale,
+                                              std::abs(frame.rightWave[i]) * rightScale);
                 peak = std::max(peak, sample);
                 sumSquares += sample * sample;
             }
             const float rms = std::sqrt(sumSquares / static_cast<float>(audio::kWavePoints));
-            const float scale = frame.scopeScale[0] >= 0.0f || frame.scopeScale[1] >= 0.0f ?
-                std::max(frame.scopeScale[0], frame.scopeScale[1]) : 48.0f;
             const float activity = !frame.hasAudio ? 0.0f :
                 frame.scopeScale[0] >= 0.0f || frame.scopeScale[1] >= 0.0f ?
                 1.0f : std::clamp(frame.visualActivity, 0.0f, 1.0f);
-            const int peakPixels = std::clamp(static_cast<int>(std::round(peak * scale * activity)), 0, 48);
-            const int rmsPixels = std::clamp(static_cast<int>(std::round(rms * scale * activity)), 0, peakPixels);
+            const int peakPixels = std::clamp(static_cast<int>(std::round(peak * activity)), 0, 48);
+            const int rmsPixels = std::clamp(static_cast<int>(std::round(rms * activity)), 0, peakPixels);
             std::move(waveformPeak_.begin() + 1, waveformPeak_.end(), waveformPeak_.begin());
             std::move(waveformRms_.begin() + 1, waveformRms_.end(), waveformRms_.begin());
             waveformPeak_.back() = static_cast<std::uint8_t>(peakPixels);

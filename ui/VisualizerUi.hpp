@@ -15,7 +15,7 @@ namespace ui {
 class VisualizerUi {
 public:
     enum class SpectrumStyle : std::uint8_t {
-        Bars = 0, Trace, Dots, NeonPulse, Mirror, Waveform, Halo,
+        Bars = 0, Trace, Dots, NeonPulse, Mirror, Waveform, Oscilloscope, Halo,
         Waterfall, Ridgeline, TopoBloom, AuroraWeave, CymaticMesh, Count
     };
     enum class TouchAction : std::uint8_t { NextMode, NextSpectrumStyle };
@@ -118,7 +118,7 @@ private:
     lv_obj_t* leftValue_ = nullptr;
     lv_obj_t* rightValue_ = nullptr;
     std::string statusText_ = "STARTING AUDIO";
-    Mode mode_ = Mode::Spectrum;
+    Mode mode_ = Mode::NowPlaying;
     SpectrumStyle spectrumStyle_ = SpectrumStyle::Bars;
     bool shellDrawn_ = false;
     bool modeChanged_ = true;

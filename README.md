@@ -47,15 +47,16 @@ The current macOS builds are unsigned, so first launch may require
 
 ## Use it
 
-Start the app and play music normally. AudioViz opens in **Spectrum** mode.
+Start the app and play music normally. AudioViz opens in **Now Playing** mode.
 
 - Click **STYLE** to cycle through visual styles.
-- Click **MODE** or press **Space** to switch between all seven displays.
-- Press a number from **1** to **7** to jump directly to a display.
+- Click **MODE** or press **Space** to switch between the five main displays.
+- Press a number from **1** to **5** to jump directly to a display.
 - Use `--demo` to explore the interface without an audio source.
 
-Spectrum includes Bars, Trace, Dots, Pulse, Mirror, Waveform, Halo, Waterfall,
-Ridgeline, Topo Bloom, Aurora Weave and Cymatic Mesh.
+Spectrum includes Bars, Trace, Dots, Pulse, Mirror, Waveform, Scope, Halo,
+Waterfall, Ridgeline, Topo Bloom, Aurora Weave and Cymatic Mesh. The warm VU
+display is temporarily hidden from the main navigation.
 
 The utility displays add Market Pulse, Studio Clock, Now Playing and Desk
 Board. Market Pulse and the Desk Board fetch public BTC, ETH and SOL market
@@ -131,9 +132,9 @@ AudioViz_PC --demo --mode 1 --style 6
 AudioViz_PC --screenshot output.bmp --frames 60
 ```
 
-Modes are `1` Spectrum, `2` VU, `3` Oscilloscope, `4` Market Pulse, `5` Studio
-Clock, `6` Now Playing and `7` Desk Board. Spectrum styles use indices `0`
-through `11` in the order listed above.
+Modes are `1` Now Playing, `2` Spectrum, `3` Studio Clock, `4` Market Pulse and
+`5` Desk Board. Spectrum styles use indices `0` through `12` in the order
+listed above.
 
 Weather is refreshed every 15 minutes. Use `--weather-city "CITY"` to override
 the default Hanoi location. The app keeps the last successful market/weather
