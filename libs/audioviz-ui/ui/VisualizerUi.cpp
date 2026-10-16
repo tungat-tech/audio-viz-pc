@@ -1,4 +1,5 @@
 #include "ui/VisualizerUi.hpp"
+#include "ui/IndexedPalette.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -14,6 +15,39 @@ LV_FONT_DECLARE(lv_font_montserrat_vietnamese_14);
 namespace ui {
 namespace {
 constexpr float kPi = 3.14159265358979323846f;
+struct UnitPoint {
+    float x;
+    float y;
+};
+
+template <std::size_t Count>
+const std::array<UnitPoint, Count>& unitCircle() {
+    // Halo used to evaluate hundreds of sin/cos calls on every frame. Cache
+    // the fixed unit-circle geometry once and rotate it with one sin/cos pair.
+    static const auto points = [] {
+        std::array<UnitPoint, Count> result{};
+        for (std::size_t i = 0; i < Count; ++i) {
+            const float angle = 2.0f * kPi * static_cast<float>(i) /
+                                static_cast<float>(Count);
+            result[i] = {std::cos(angle), std::sin(angle)};
+        }
+        return result;
+    }();
+    return points;
+}
+
+float fastSin(float angle) {
+    constexpr float toIndex = 256.0f / (2.0f * kPi);
+    const auto index = static_cast<unsigned>(static_cast<int>(angle * toIndex));
+    return unitCircle<256>()[index & 255U].y;
+}
+
+float fastCos(float angle) {
+    constexpr float toIndex = 256.0f / (2.0f * kPi);
+    const auto index = static_cast<unsigned>(static_cast<int>(angle * toIndex));
+    return unitCircle<256>()[index & 255U].x;
+}
+
 lv_color_t rgb(int r, int g, int b) {
     return lv_color_make(static_cast<std::uint8_t>(r),
                          static_cast<std::uint8_t>(g),
@@ -149,12 +183,28 @@ ConceptColors conceptColors(VisualizerUi::SpectrumStyle style) {
                      kViolet, rgb(193, 247, 248)};
     }
 }
+std::uint8_t paletteIndex(lv_color_t color) {
+    return indexed_palette::index(color);
+}
 } // namespace
 
 VisualizerUi::VisualizerUi()
     : ownedBuffer_(new (std::nothrow) lv_color_t[kCanvasPixels]),
       buffer_(ownedBuffer_.get()) {
     if (buffer_) initialize();
+}
+
+VisualizerUi::VisualizerUi(lv_color_t* canvasBuffer, std::size_t pixelCount)
+    : buffer_(pixelCount >= kCanvasPixels ? canvasBuffer : nullptr) {
+    if (buffer_) initialize();
+}
+
+VisualizerUi::VisualizerUi(std::uint8_t* indexedBuffer, std::size_t byteCount,
+                           CanvasStorage storage)
+    : indexedBuffer_(byteCount >= LV_CANVAS_BUF_SIZE_INDEXED_8BIT(kWidth, kHeight)
+                         ? indexedBuffer : nullptr) {
+    (void)storage;
+    if (indexedBuffer_) initialize();
 }
 
 VisualizerUi::~VisualizerUi() {
@@ -167,12 +217,28 @@ VisualizerUi::~VisualizerUi() {
 
 void VisualizerUi::initialize() {
     // A refresh before the first render must never expose uninitialized pixels.
-    std::fill_n(buffer_, kCanvasPixels, lv_color_t{});
+    if (indexedBuffer_) {
+        std::fill_n(indexedBuffer_,
+                    LV_CANVAS_BUF_SIZE_INDEXED_8BIT(kWidth, kHeight), 0);
+        indexPixels_ = indexedBuffer_ + 4 * 256;
+    } else {
+        std::fill_n(buffer_, kCanvasPixels, lv_color_t{});
+    }
     lv_obj_t* screen = lv_scr_act();
     lv_obj_clear_flag(screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(screen, kBackground, 0);
     canvas_ = lv_canvas_create(screen);
-    lv_canvas_set_buffer(canvas_, buffer_, kWidth, kHeight, LV_IMG_CF_TRUE_COLOR);
+    if (indexedBuffer_) {
+        lv_canvas_set_buffer(canvas_, indexedBuffer_, kWidth, kHeight,
+                             LV_IMG_CF_INDEXED_8BIT);
+        for (unsigned index = 0; index < 256; ++index)
+            lv_canvas_set_palette(canvas_, static_cast<std::uint8_t>(index),
+                                  indexed_palette::color(
+                                      static_cast<std::uint8_t>(index)));
+    } else {
+        lv_canvas_set_buffer(canvas_, buffer_, kWidth, kHeight,
+                             LV_IMG_CF_TRUE_COLOR);
+    }
     lv_obj_set_pos(canvas_, 0, 0);
     title_ = label(screen, 20, 7, "STUDIO MONITOR", &lv_font_montserrat_14,
                    kText);
@@ -242,6 +308,8 @@ void VisualizerUi::setTouchActionHandler(TouchActionHandler handler, void* conte
 void VisualizerUi::nextMode() {
     if (!ready()) return;
     modeChanged_ = true;
+    // VU is temporarily hidden and Scope lives under Spectrum styles. Keep
+    // both renderers compiled so this information architecture is reversible.
     switch (mode_) {
     case Mode::NowPlaying: mode_ = Mode::Spectrum; break;
     case Mode::Spectrum: mode_ = Mode::Clock; break;
@@ -365,7 +433,8 @@ void VisualizerUi::updateLabels() {
             annotation(1, 17, 181, "ROLLING HISTORY", rgb(142, 169, 182));
             annotation(2, 272, 181, "TIME >", rgb(142, 169, 182));
         } else if (spectrumStyle_ == SpectrumStyle::Oscilloscope) {
-            // The trace panels intentionally remain label-free.
+            // The traces use the complete panel. Avoid LVGL labels over this
+            // direct-DMA region so a trace update never overwrites text.
         } else if (spectrumStyle_ == SpectrumStyle::Halo) {
             annotation(0, 17, 57, "RADIAL / LIVE", rgb(193, 247, 248));
             annotation(1, 17, 181, "LOW  /  HIGH  /  LOW", rgb(142, 169, 182));
@@ -511,7 +580,11 @@ void VisualizerUi::pixel(int x, int y, lv_color_t color) {
     if (x >= clipArea_.x1 && x <= clipArea_.x2 &&
         y >= clipArea_.y1 && y <= clipArea_.y2 &&
         x >= 0 && x < kWidth && y >= 0 && y < kHeight) {
-        buffer_[static_cast<std::size_t>(y) * kWidth + x] = color;
+        if (indexPixels_)
+            indexPixels_[static_cast<std::size_t>(y) * kWidth + x] =
+                paletteIndex(color);
+        else
+            buffer_[static_cast<std::size_t>(y) * kWidth + x] = color;
     }
 }
 void VisualizerUi::line(int x0, int y0, int x1, int y1, lv_color_t color) {
@@ -543,9 +616,18 @@ void VisualizerUi::rect(int x, int y, int w, int h, lv_color_t color) {
     const int top = std::max({y, 0, static_cast<int>(clipArea_.y1)});
     const int bottom = std::min({y + h, kHeight, static_cast<int>(clipArea_.y2) + 1});
     if (left >= right) return;
-    for (int row = top; row < bottom; ++row)
-        std::fill(buffer_ + static_cast<std::size_t>(row) * kWidth + left,
-                  buffer_ + static_cast<std::size_t>(row) * kWidth + right, color);
+    if (indexPixels_) {
+        const auto index = paletteIndex(color);
+        for (int row = top; row < bottom; ++row)
+            std::fill(indexPixels_ + static_cast<std::size_t>(row) * kWidth + left,
+                      indexPixels_ + static_cast<std::size_t>(row) * kWidth + right,
+                      index);
+    } else {
+        for (int row = top; row < bottom; ++row)
+            std::fill(buffer_ + static_cast<std::size_t>(row) * kWidth + left,
+                      buffer_ + static_cast<std::size_t>(row) * kWidth + right,
+                      color);
+    }
 }
 void VisualizerUi::frameRect(int x, int y, int w, int h, lv_color_t color) {
     line(x, y, x + w - 1, y, color);
@@ -559,9 +641,32 @@ void VisualizerUi::disc(int cx, int cy, int radius, lv_color_t color) {
             if (x * x + y * y <= radius * radius) pixel(cx + x, cy + y, color);
 }
 void VisualizerUi::clear(lv_color_t color) {
-    std::fill_n(buffer_, kCanvasPixels, color);
+    if (indexPixels_)
+        std::fill_n(indexPixels_, kCanvasPixels, paletteIndex(color));
+    else
+        std::fill_n(buffer_, kCanvasPixels, color);
 }
 void VisualizerUi::invalidate(const lv_area_t& area) {
+    const bool directStyle = spectrumStyle_ == SpectrumStyle::Bars ||
+        spectrumStyle_ == SpectrumStyle::Dots ||
+        spectrumStyle_ == SpectrumStyle::NeonPulse ||
+        spectrumStyle_ == SpectrumStyle::Mirror ||
+        spectrumStyle_ == SpectrumStyle::Waveform ||
+        spectrumStyle_ == SpectrumStyle::Oscilloscope ||
+        spectrumStyle_ == SpectrumStyle::Halo ||
+        spectrumStyle_ == SpectrumStyle::Waterfall ||
+        spectrumStyle_ == SpectrumStyle::Ridgeline ||
+        spectrumStyle_ == SpectrumStyle::TopoBloom ||
+        spectrumStyle_ == SpectrumStyle::AuroraWeave ||
+        spectrumStyle_ == SpectrumStyle::CymaticMesh;
+    const bool directRegion = (mode_ == Mode::Spectrum && directStyle) ||
+        (mode_ == Mode::Clock && area.y1 >= 129) ||
+        (mode_ == Mode::DeskBoard && area.y1 >= 152 && area.y2 <= 182);
+    if (directCanvasUpdates_ && !modeChanged_ && directRegion &&
+        directDirtyCount_ < directDirtyAreas_.size()) {
+        directDirtyAreas_[directDirtyCount_++] = area;
+        return;
+    }
     // This canvas is always untransformed and covers the screen. LVGL's object
     // invalidation expands every area by 5 px for transformed objects; that
     // joins adjacent 8-px Spectrum columns (4-px gaps) into one broad strip.
@@ -575,6 +680,17 @@ void VisualizerUi::invalidate(const lv_area_t& area) {
     absolute.y2 += canvasCoordinates.y1;
     if (lv_obj_get_screen(canvas_) == lv_scr_act())
         _lv_inv_area(lv_obj_get_disp(canvas_), &absolute);
+}
+
+void VisualizerUi::invalidateTiled(const lv_area_t& area) {
+    // The ESP32 profile has a 320x8-pixel DMA buffer. Horizontal slices keep
+    // every direct indexed-canvas transfer within that fixed capacity.
+    constexpr int tileLines = 8;
+    for (int y = area.y1; y <= area.y2; y += tileLines) {
+        invalidate({area.x1, static_cast<lv_coord_t>(y), area.x2,
+                    static_cast<lv_coord_t>(std::min(y + tileLines - 1,
+                                                    static_cast<int>(area.y2)))});
+    }
 }
 void VisualizerUi::drawShell() {
     clear(rgb(9, 20, 31));
@@ -906,20 +1022,37 @@ void VisualizerUi::drawHalo(const audio::AudioFrame& frame, bool full) {
         haloPulse_ *= 0.92f;
     }
 
-    clipArea_ = {8, 51, 311, 197};
-    rect(10, 53, 304, 147, rgb(3, 10, 20));
-    rect(8, 51, 304, 147, kColdPanel);
-    rect(11, 54, 298, 141, rgb(4, 17, 30));
-    frameRect(8, 51, 304, 147, kColdGrid);
+    // Only this circle can contain moving Halo pixels. Keeping the rest of the
+    // panel static cuts each normal refresh from 44,688 to about 16,300 pixels.
+    // The bounding square remains the clip, while direct SPI invalidation below
+    // follows the circle in eight-line chords.
+    constexpr lv_area_t dynamicArea{88, 52, 232, 196};
+    clipArea_ = full ? lv_area_t{8, 51, 311, 197} : dynamicArea;
+    if (full) {
+        rect(10, 53, 304, 147, rgb(3, 10, 20));
+        rect(8, 51, 304, 147, kColdPanel);
+        rect(11, 54, 298, 141, rgb(4, 17, 30));
+        frameRect(8, 51, 304, 147, kColdGrid);
+    } else {
+        constexpr int clearRadius = 72;
+        for (int dy = -clearRadius; dy <= clearRadius; ++dy) {
+            const int halfWidth = static_cast<int>(std::sqrt(
+                static_cast<float>(clearRadius * clearRadius - dy * dy)));
+            const int y = cy + dy;
+            const auto background = y >= 54 && y <= 194 ? rgb(4, 17, 30) : kColdPanel;
+            rect(cx - halfWidth, y, halfWidth * 2 + 1, 1, background);
+        }
+    }
 
     const auto ring = [this, cx, cy](float radius, lv_color_t color) {
         constexpr int segments = 96;
-        int lastX = cx + static_cast<int>(std::lround(radius));
-        int lastY = cy;
+        const auto& points = unitCircle<segments>();
+        int lastX = cx + static_cast<int>(std::lround(points[0].x * radius));
+        int lastY = cy + static_cast<int>(std::lround(points[0].y * radius));
         for (int i = 1; i <= segments; ++i) {
-            const float angle = 2.0f * kPi * i / segments;
-            const int x = cx + static_cast<int>(std::lround(std::cos(angle) * radius));
-            const int y = cy + static_cast<int>(std::lround(std::sin(angle) * radius));
+            const auto& point = points[static_cast<std::size_t>(i) % points.size()];
+            const int x = cx + static_cast<int>(std::lround(point.x * radius));
+            const int y = cy + static_cast<int>(std::lround(point.y * radius));
             line(lastX, lastY, x, y, color);
             lastX = x;
             lastY = y;
@@ -931,9 +1064,15 @@ void VisualizerUi::drawHalo(const audio::AudioFrame& frame, bool full) {
     disc(cx, cy, 17 + static_cast<int>(haloPulse_ * 3.0f), rgb(12, 39, 66));
     disc(cx, cy, 12, rgb(7, 27, 49));
 
+    const float phaseCos = std::cos(haloPhase_);
+    const float phaseSin = std::sin(haloPhase_);
+    const auto& spokePoints = unitCircle<spokes>();
     for (int i = 0; i < spokes; ++i) {
-        const float angle = -kPi * 0.5f + haloPhase_ + 2.0f * kPi * i / spokes;
-        const float ux = std::cos(angle), uy = std::sin(angle);
+        const auto& point = spokePoints[static_cast<std::size_t>(i)];
+        // Rotate the cached unit point by phase, then by -pi/2.
+        const float rotatedX = point.x * phaseCos - point.y * phaseSin;
+        const float rotatedY = point.x * phaseSin + point.y * phaseCos;
+        const float ux = rotatedY, uy = -rotatedX;
         const float tx = -uy, ty = ux;
         const float frequency = static_cast<float>(std::min(i, spokes - i)) /
                                 (spokes / 2);
@@ -980,15 +1119,18 @@ void VisualizerUi::drawHalo(const audio::AudioFrame& frame, bool full) {
     const float scale = frame.scopeScale[0] >= 0.0f ? frame.scopeScale[0] * 0.24f :
         frame.hasAudio ? 6.0f / std::max(maximum, 0.01f) : 0.0f;
     int lastX = 0, lastY = 0;
+    const auto& wavePoints = unitCircle<audio::kWavePoints>();
     for (std::size_t i = 0; i <= audio::kWavePoints; ++i) {
         const std::size_t sampleIndex = i % audio::kWavePoints;
         const float sample = (frame.leftWave[sampleIndex] + frame.rightWave[sampleIndex]) * 0.5f;
         const float displacement = std::clamp(sample * scale, -7.0f, 7.0f);
-        const float angle = -kPi * 0.5f + haloPhase_ +
-                            2.0f * kPi * static_cast<float>(i) / audio::kWavePoints;
+        const auto& point = wavePoints[sampleIndex];
+        const float rotatedX = point.x * phaseCos - point.y * phaseSin;
+        const float rotatedY = point.x * phaseSin + point.y * phaseCos;
+        const float ux = rotatedY, uy = -rotatedX;
         const float radius = 31.0f + displacement;
-        const int x = cx + static_cast<int>(std::lround(std::cos(angle) * radius));
-        const int y = cy + static_cast<int>(std::lround(std::sin(angle) * radius));
+        const int x = cx + static_cast<int>(std::lround(ux * radius));
+        const int y = cy + static_cast<int>(std::lround(uy * radius));
         if (i) {
             line(lastX, lastY - 1, x, y - 1, rgb(35, 103, 151));
             line(lastX, lastY, x, y, rgb(146, 225, 246));
@@ -1001,7 +1143,22 @@ void VisualizerUi::drawHalo(const audio::AudioFrame& frame, bool full) {
     ring(20.0f + centerEnergy * 2.0f, rgb(55, 122, 163));
     disc(cx, cy, 4 + static_cast<int>(centerEnergy * 4.0f), rgb(42, 128, 174));
     disc(cx, cy, 2, rgb(193, 247, 248));
-    if (!full) invalidate(clipArea_);
+    if (!full) {
+        // Follow the circular footprint rather than transferring the empty
+        // corners of its 145x145 bounding square. Each chord still fits the
+        // fixed 320x8 DMA buffers used by the ESP32 backend.
+        constexpr int radius = 72;
+        constexpr int tileLines = 8;
+        for (int y1 = cy - radius; y1 <= cy + radius; y1 += tileLines) {
+            const int y2 = std::min(y1 + tileLines - 1, cy + radius);
+            const int nearestY = std::clamp(cy, y1, y2);
+            const int dy = nearestY - cy;
+            const int halfWidth = static_cast<int>(std::sqrt(
+                static_cast<float>(radius * radius - dy * dy)));
+            invalidate({static_cast<lv_coord_t>(cx - halfWidth), static_cast<lv_coord_t>(y1),
+                        static_cast<lv_coord_t>(cx + halfWidth), static_cast<lv_coord_t>(y2)});
+        }
+    }
 }
 void VisualizerUi::drawWaterfall(const audio::AudioFrame& frame, bool full) {
     const bool fresh = frame.generation != waterfallLastGeneration_;
@@ -1015,7 +1172,8 @@ void VisualizerUi::drawWaterfall(const audio::AudioFrame& frame, bool full) {
     }
     if (!full && !fresh) return;
 
-    clipArea_ = {8, 51, 311, 197};
+    constexpr lv_area_t dynamicArea{16, 72, 304, 180};
+    clipArea_ = full ? lv_area_t{8, 51, 311, 197} : dynamicArea;
     rect(10, 53, 304, 147, rgb(3, 10, 20));
     rect(8, 51, 304, 147, kColdPanel);
     frameRect(8, 51, 304, 147, kColdGrid);
@@ -1029,7 +1187,7 @@ void VisualizerUi::drawWaterfall(const audio::AudioFrame& frame, bool full) {
         }
     }
     line(16, 179, 303, 179, rgb(85, 127, 145));
-    if (!full) invalidate(clipArea_);
+    if (!full) invalidateTiled(dynamicArea);
 }
 
 void VisualizerUi::drawRidgeline(const audio::AudioFrame& frame, bool full) {
@@ -1050,7 +1208,8 @@ void VisualizerUi::drawRidgeline(const audio::AudioFrame& frame, bool full) {
     const std::array<lv_color_t, kRidgelineRows> lines{
         rgb(76, 95, 145), rgb(96, 119, 184), rgb(109, 159, 219),
         rgb(105, 196, 221), rgb(128, 224, 236)};
-    clipArea_ = {8, 51, 311, 197};
+    constexpr lv_area_t dynamicArea{16, 73, 303, 179};
+    clipArea_ = full ? lv_area_t{8, 51, 311, 197} : dynamicArea;
     rect(10, 53, 304, 147, rgb(3, 10, 20));
     rect(8, 51, 304, 147, kColdPanel);
     rect(11, 54, 298, 141, rgb(7, 23, 39));
@@ -1078,7 +1237,7 @@ void VisualizerUi::drawRidgeline(const audio::AudioFrame& frame, bool full) {
         }
     }
     line(16, 179, 303, 179, rgb(85, 127, 145));
-    if (!full) invalidate(clipArea_);
+    if (!full) invalidateTiled(dynamicArea);
 }
 
 void VisualizerUi::drawTopoBloom(const audio::AudioFrame& frame, bool full) {
@@ -1092,7 +1251,8 @@ void VisualizerUi::drawTopoBloom(const audio::AudioFrame& frame, bool full) {
     }
     if (!full && !fresh) return;
 
-    clipArea_ = {8, 51, 311, 197};
+    constexpr lv_area_t dynamicArea{8, 62, 305, 192};
+    clipArea_ = full ? lv_area_t{8, 51, 311, 197} : dynamicArea;
     rect(8, 51, 304, 147, kColdPanel);
     rect(11, 54, 298, 141, rgb(4, 18, 32));
     frameRect(8, 51, 304, 147, kColdGrid);
@@ -1109,8 +1269,9 @@ void VisualizerUi::drawTopoBloom(const audio::AudioFrame& frame, bool full) {
 
     constexpr int contours = 11;
     constexpr int segments = 84;
-    const int cx = 145 + static_cast<int>(std::lround(std::sin(topoPhase_ * 0.43f) * 5.0f));
-    const int cy = 127 + static_cast<int>(std::lround(std::cos(topoPhase_ * 0.37f) * 3.0f));
+    const int cx = 145 + static_cast<int>(std::lround(fastSin(topoPhase_ * 0.43f) * 5.0f));
+    const int cy = 127 + static_cast<int>(std::lround(fastCos(topoPhase_ * 0.37f) * 3.0f));
+    const auto& contourPoints = unitCircle<segments>();
     for (int contour = contours - 1; contour >= 0; --contour) {
         const float base = 8.0f + contour * 6.4f;
         const float frequency = static_cast<float>(contour) / (contours - 1);
@@ -1118,14 +1279,16 @@ void VisualizerUi::drawTopoBloom(const audio::AudioFrame& frame, bool full) {
         int previousX = 0, previousY = 0;
         for (int segment = 0; segment <= segments; ++segment) {
             const float angle = 2.0f * kPi * segment / segments;
+            const auto& point = contourPoints[static_cast<std::size_t>(segment) %
+                                              contourPoints.size()];
             const float audioPosition = std::fmod(angle / (2.0f * kPi) + 0.13f, 1.0f);
             const float energy = spectrumAt(frame, audioPosition);
-            const float warp = std::sin(angle * 3.0f + topoPhase_ + contour * 0.31f) * 2.4f +
-                               std::sin(angle * 7.0f - topoPhase_ * 0.63f + contour) * 1.3f +
+            const float warp = fastSin(angle * 3.0f + topoPhase_ + contour * 0.31f) * 2.4f +
+                               fastSin(angle * 7.0f - topoPhase_ * 0.63f + contour) * 1.3f +
                                energy * (3.2f + contour * 0.16f);
             const float radius = base + warp;
-            const int x = cx + static_cast<int>(std::lround(std::cos(angle) * radius * 1.82f));
-            const int y = cy + static_cast<int>(std::lround(std::sin(angle) * radius * 0.72f));
+            const int x = cx + static_cast<int>(std::lround(point.x * radius * 1.82f));
+            const int y = cy + static_cast<int>(std::lround(point.y * radius * 0.72f));
             if (segment) {
                 line(previousX, previousY + 1, x, y + 1, rgb(20, 45, 70));
                 line(previousX, previousY, x, y, color);
@@ -1139,7 +1302,7 @@ void VisualizerUi::drawTopoBloom(const audio::AudioFrame& frame, bool full) {
     disc(cx, cy, 3, rgb(83, 190, 211));
     disc(cx, cy, 1, rgb(215, 250, 251));
     line(16, 179, 303, 179, rgb(85, 127, 145));
-    if (!full) invalidate(clipArea_);
+    if (!full) invalidateTiled(dynamicArea);
 }
 
 void VisualizerUi::drawAuroraWeave(const audio::AudioFrame& frame, bool full) {
@@ -1153,7 +1316,8 @@ void VisualizerUi::drawAuroraWeave(const audio::AudioFrame& frame, bool full) {
     }
     if (!full && !fresh) return;
 
-    clipArea_ = {8, 51, 311, 197};
+    constexpr lv_area_t dynamicArea{16, 68, 304, 180};
+    clipArea_ = full ? lv_area_t{8, 51, 311, 197} : dynamicArea;
     rect(8, 51, 304, 147, kColdPanel);
     rect(11, 54, 298, 141, rgb(4, 18, 32));
     frameRect(8, 51, 304, 147, kColdGrid);
@@ -1174,10 +1338,10 @@ void VisualizerUi::drawAuroraWeave(const audio::AudioFrame& frame, bool full) {
             const float t = static_cast<float>(x - 17) / 286.0f;
             const float energy = spectrumAt(frame, t);
             const float direction = ribbon & 1 ? -1.0f : 1.0f;
-            const float wave = std::sin(t * 2.0f * kPi * (1.05f + ribbon * 0.12f) +
+            const float wave = fastSin(t * 2.0f * kPi * (1.05f + ribbon * 0.12f) +
                                         direction * auroraPhase_ + ribbon * 0.78f) *
                                    (4.0f + energy * 7.0f) +
-                               std::sin(t * 5.0f * kPi - auroraPhase_ * 0.48f + ribbon) * 2.2f;
+                               fastSin(t * 5.0f * kPi - auroraPhase_ * 0.48f + ribbon) * 2.2f;
             const int center = baseline + static_cast<int>(std::lround(wave));
             const int half = 2 + static_cast<int>(std::lround(energy * 3.0f));
             const int top = center - half;
@@ -1204,7 +1368,7 @@ void VisualizerUi::drawAuroraWeave(const audio::AudioFrame& frame, bool full) {
         }
     }
     line(16, 179, 303, 179, rgb(85, 127, 145));
-    if (!full) invalidate(clipArea_);
+    if (!full) invalidateTiled(dynamicArea);
 }
 
 void VisualizerUi::drawCymaticMesh(const audio::AudioFrame& frame, bool full) {
@@ -1218,7 +1382,8 @@ void VisualizerUi::drawCymaticMesh(const audio::AudioFrame& frame, bool full) {
     }
     if (!full && !fresh) return;
 
-    clipArea_ = {8, 51, 311, 197};
+    constexpr lv_area_t dynamicArea{11, 64, 311, 188};
+    clipArea_ = full ? lv_area_t{8, 51, 311, 197} : dynamicArea;
     rect(8, 51, 304, 147, kColdPanel);
     rect(11, 54, 298, 141, rgb(3, 17, 30));
     frameRect(8, 51, 304, 147, kColdGrid);
@@ -1229,9 +1394,9 @@ void VisualizerUi::drawCymaticMesh(const audio::AudioFrame& frame, bool full) {
         const float energy = spectrumAt(frame, t);
         int previousX = baseX, previousY = 72;
         for (int y = 72; y <= 178; y += 3) {
-            const float warp = std::sin(y * 0.087f + cymaticPhase_ + column * 0.51f) *
+            const float warp = fastSin(y * 0.087f + cymaticPhase_ + column * 0.51f) *
                                    (1.4f + energy * 4.8f) +
-                               std::sin((y + baseX) * 0.041f - cymaticPhase_ * 0.61f) * 2.0f;
+                               fastSin((y + baseX) * 0.041f - cymaticPhase_ * 0.61f) * 2.0f;
             const int x = baseX + static_cast<int>(std::lround(warp));
             if (y > 72) line(previousX, previousY, x, y,
                              column % 3 == 0 ? rgb(45, 104, 139) : rgb(28, 67, 96));
@@ -1245,9 +1410,9 @@ void VisualizerUi::drawCymaticMesh(const audio::AudioFrame& frame, bool full) {
         for (int x = 17; x <= 303; x += 4) {
             const float t = static_cast<float>(x - 17) / 286.0f;
             const float energy = spectrumAt(frame, t);
-            const float warp = std::sin(x * 0.055f - cymaticPhase_ + row * 0.64f) *
+            const float warp = fastSin(x * 0.055f - cymaticPhase_ + row * 0.64f) *
                                    (1.5f + energy * 4.2f) +
-                               std::sin((x - baseY) * 0.036f + cymaticPhase_ * 0.53f) * 2.0f;
+                               fastSin((x - baseY) * 0.036f + cymaticPhase_ * 0.53f) * 2.0f;
             const int y = baseY + static_cast<int>(std::lround(warp));
             if (x > 17) line(previousX, previousY, x, y,
                              row % 3 == 0 ? rgb(54, 112, 150) : rgb(31, 70, 101));
@@ -1264,21 +1429,21 @@ void VisualizerUi::drawCymaticMesh(const audio::AudioFrame& frame, bool full) {
         const float energy = spectrumAt(frame, t);
         for (int row = 1; row < 14; row += 2) {
             const int baseY = 74 + row * 8;
-            const float pulse = 0.5f + 0.5f * std::sin(column * 0.83f + row * 0.57f +
+            const float pulse = 0.5f + 0.5f * fastSin(column * 0.83f + row * 0.57f +
                                                        cymaticPhase_ * 2.0f);
             if (energy * 0.72f + pulse * 0.28f < 0.24f) continue;
             const int x = baseX + static_cast<int>(std::lround(
-                std::sin(baseY * 0.087f + cymaticPhase_ + column * 0.51f) *
+                fastSin(baseY * 0.087f + cymaticPhase_ + column * 0.51f) *
                 (1.4f + energy * 4.8f)));
             const int y = baseY + static_cast<int>(std::lround(
-                std::sin(baseX * 0.055f - cymaticPhase_ + row * 0.64f) *
+                fastSin(baseX * 0.055f - cymaticPhase_ + row * 0.64f) *
                 (1.5f + energy * 4.2f)));
             disc(x, y, energy > 0.72f ? 2 : 1,
                  energy > 0.55f ? rgb(195, 247, 250) : rgb(86, 190, 211));
         }
     }
     line(16, 179, 303, 179, rgb(85, 127, 145));
-    if (!full) invalidate(clipArea_);
+    if (!full) invalidateTiled(dynamicArea);
 }
 
 void VisualizerUi::resetSpectrumHistory() {
@@ -1334,6 +1499,9 @@ void VisualizerUi::drawWaveform(const audio::AudioFrame& frame, bool full) {
             const float leftScale = frame.scopeScale[0] >= 0.0f ? frame.scopeScale[0] : 48.0f;
             const float rightScale = frame.scopeScale[1] >= 0.0f ? frame.scopeScale[1] : 48.0f;
             for (std::size_t i = 0; i < audio::kWavePoints; ++i) {
+                // Apply each channel's adaptive gain before combining them.
+                // Using the larger gain for both channels makes a loud channel
+                // fill the plot whenever the quiet channel has a high gain.
                 const float sample = std::max(std::abs(frame.leftWave[i]) * leftScale,
                                               std::abs(frame.rightWave[i]) * rightScale);
                 peak = std::max(peak, sample);
@@ -1445,7 +1613,13 @@ void VisualizerUi::drawScope(const audio::AudioFrame& frame, bool full) {
         }
         waveY_[channel] = next;
         drawScopeTrace(channel);
-        if (!full) invalidate(clipArea_);
+        if (!full) {
+            if (directCanvasUpdates_ && mode_ == Mode::Spectrum &&
+                spectrumStyle_ == SpectrumStyle::Oscilloscope)
+                invalidateTiled(clipArea_);
+            else
+                invalidate(clipArea_);
+        }
     }
 }
 void VisualizerUi::render(const audio::AudioFrame& frame,
@@ -1455,6 +1629,7 @@ void VisualizerUi::render(const audio::AudioFrame& frame,
     static const data::UtilityFrame emptyUtility;
     const data::UtilityFrame& utility = utilityFrame ? *utilityFrame : emptyUtility;
     waveformExternalHistory_ = waveformHistory;
+    directDirtyCount_ = 0;
     const bool full = modeChanged_;
     clipArea_ = {0, 0, kWidth - 1, kHeight - 1};
     if (full) {

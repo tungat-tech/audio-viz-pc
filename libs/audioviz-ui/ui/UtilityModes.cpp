@@ -208,54 +208,66 @@ void VisualizerUi::drawClock(const audio::AudioFrame& frame,
         rect(x, baseline + 2, 6, std::max(1, height / 3),
              band < 8 || band > 18 ? color(31, 83, 112) : color(45, 48, 119));
     }
-    invalidate(full ? lv_area_t{8, 48, 311, 197}
-                    : lv_area_t{17, 129, 303, 175});
+    if (full) invalidate({8, 48, 311, 197});
+    else invalidateTiled({17, 129, 303, 175});
 }
 
 void VisualizerUi::drawNowPlaying(const audio::AudioFrame& frame,
                                   const data::UtilityFrame& utility, bool full) {
-    (void)full;
-    drawUtilityPanel();
+    if (full) drawUtilityPanel();
     updateLabel(leftValue_, utility.trackTitle);
     updateLabel(annotations_[0], utility.trackArtist);
     updateLabel(annotations_[1], utility.trackPosition);
 
     constexpr int artLeft = 17;
     constexpr int artTop = 58;
-    if (utility.albumArt) {
-        const auto& rgb565 = utility.albumArt->rgb565;
-        for (std::size_t y = 0; y < data::kAlbumArtHeight; ++y) {
-            for (std::size_t x = 0; x < data::kAlbumArtWidth; ++x) {
-                const auto packed = rgb565[y * data::kAlbumArtWidth + x];
-                pixel(artLeft + static_cast<int>(x), artTop + static_cast<int>(y),
-                      color(((packed >> 11) & 0x1F) * 255 / 31,
-                            ((packed >> 5) & 0x3F) * 255 / 63,
-                            (packed & 0x1F) * 255 / 31));
+    const bool albumChanged = !nowPlayingAlbumKnown_ ||
+                              utility.albumArt.get() != nowPlayingAlbum_;
+    if (full || albumChanged) {
+        if (utility.albumArt) {
+            const auto& rgb565 = utility.albumArt->rgb565;
+            for (std::size_t y = 0; y < data::kAlbumArtHeight; ++y) {
+                for (std::size_t x = 0; x < data::kAlbumArtWidth; ++x) {
+                    const auto packed = rgb565[y * data::kAlbumArtWidth + x];
+                    pixel(artLeft + static_cast<int>(x), artTop + static_cast<int>(y),
+                          color(((packed >> 11) & 0x1F) * 255 / 31,
+                                ((packed >> 5) & 0x3F) * 255 / 63,
+                                (packed & 0x1F) * 255 / 31));
+                }
+            }
+        } else {
+            // A-signal app logo: deterministic fallback when the active player
+            // does not expose a thumbnail through the Windows media session.
+            rect(artLeft, artTop, data::kAlbumArtWidth, data::kAlbumArtHeight,
+                 color(8, 26, 42));
+            frameRect(artLeft + 5, artTop + 5, data::kAlbumArtWidth - 10,
+                      data::kAlbumArtHeight - 10, color(40, 71, 87));
+            line(artLeft + 13, artTop + 42, artLeft + 67, artTop + 42,
+                 color(53, 91, 107));
+            constexpr std::array<int, 5> heights{22, 42, 58, 36, 18};
+            for (std::size_t bar = 0; bar < heights.size(); ++bar) {
+                const int height = heights[bar];
+                const int x = artLeft + 16 + static_cast<int>(bar) * 11;
+                rect(x, artTop + 42 - height / 2, 7, height,
+                     bar == 3 ? color(119, 104, 237) : kCyan);
             }
         }
-    } else {
-        // A-signal app logo: deterministic fallback when the active player
-        // does not expose a thumbnail through the Windows media session.
-        rect(artLeft, artTop, data::kAlbumArtWidth, data::kAlbumArtHeight,
-             color(8, 26, 42));
-        frameRect(artLeft + 5, artTop + 5, data::kAlbumArtWidth - 10,
-                  data::kAlbumArtHeight - 10, color(40, 71, 87));
-        line(artLeft + 13, artTop + 42, artLeft + 67, artTop + 42,
-             color(53, 91, 107));
-        constexpr std::array<int, 5> heights{22, 42, 58, 36, 18};
-        for (std::size_t bar = 0; bar < heights.size(); ++bar) {
-            const int height = heights[bar];
-            const int x = artLeft + 16 + static_cast<int>(bar) * 11;
-            rect(x, artTop + 42 - height / 2, 7, height,
-                 bar == 3 ? color(119, 104, 237) : kCyan);
-        }
+        frameRect(artLeft, artTop, data::kAlbumArtWidth, data::kAlbumArtHeight,
+                  color(87, 70, 174));
+        nowPlayingAlbum_ = utility.albumArt.get();
+        nowPlayingAlbumKnown_ = true;
+        if (!full) invalidate({artLeft, artTop,
+                              artLeft + static_cast<int>(data::kAlbumArtWidth),
+                              artTop + static_cast<int>(data::kAlbumArtHeight)});
     }
-    frameRect(artLeft, artTop, data::kAlbumArtWidth, data::kAlbumArtHeight,
-              color(87, 70, 174));
 
-    rect(110, 129, 190, 5, color(22, 57, 78));
-    rect(110, 129, std::max(2, static_cast<int>(190.0f * utility.trackProgress)),
-         5, kCyan);
+    if (full || utility.generation != utilityLastGeneration_) {
+        rect(110, 129, 190, 5, color(22, 57, 78));
+        rect(110, 129, std::max(2, static_cast<int>(190.0f * utility.trackProgress)),
+             5, kCyan);
+        if (!full) invalidate({110, 129, 299, 133});
+    }
+    if (!full) rect(17, 145, 287, 52, kPanel);
     constexpr int baseline = 181;
     const float activity = frame.hasAudio
         ? std::clamp(frame.visualActivity, 0.0f, 1.0f) : 0.0f;
@@ -279,7 +291,7 @@ void VisualizerUi::drawNowPlaying(const audio::AudioFrame& frame,
         rect(x, baseline - height, 7, height, ink);
         rect(x, baseline + 2, 7, std::max(1, height / 3), color(25, 55, 91));
     }
-    invalidate({8, 48, 311, 197});
+    invalidate(full ? lv_area_t{8, 48, 311, 197} : lv_area_t{17, 145, 303, 196});
 }
 
 void VisualizerUi::drawDeskBoard(const audio::AudioFrame& frame,
@@ -364,8 +376,8 @@ void VisualizerUi::drawDeskBoard(const audio::AudioFrame& frame,
         line(17, 190, 94, 190, color(45, 105, 129));
         line(225, 190, 303, 190, color(45, 105, 129));
     }
-    invalidate(full ? lv_area_t{8, 48, 311, 197}
-                    : lv_area_t{17, 152, 303, 182});
+    if (full) invalidate({8, 48, 311, 197});
+    else invalidateTiled({17, 152, 303, 182});
 }
 
 } // namespace ui

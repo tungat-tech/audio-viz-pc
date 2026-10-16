@@ -1,6 +1,6 @@
 #pragma once
 
-#include <array>
+#include "data/MediaTypes.hpp"
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -8,13 +8,6 @@
 namespace data {
 
 constexpr std::uint32_t kMediaRefreshIntervalMs = 1000;
-constexpr std::size_t kAlbumArtWidth = 80;
-constexpr std::size_t kAlbumArtHeight = 84;
-
-struct AlbumArt {
-    std::array<std::uint16_t, kAlbumArtWidth * kAlbumArtHeight> rgb565{};
-};
-
 struct MediaDataSnapshot {
     bool active = false;
     bool playing = false;

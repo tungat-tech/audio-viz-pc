@@ -143,8 +143,9 @@ on Windows; Linux and macOS retain the no-session fallback.
 
 ## For developers
 
-AudioViz PC uses C++17, SDL2, LVGL and miniaudio. Dependencies are pinned and
-downloaded automatically during the first configure.
+AudioViz PC uses C++17, SDL2, LVGL and miniaudio. The shared UI Core is included
+under `libs/audioviz-ui`; third-party dependencies are pinned and downloaded
+automatically during the first configure.
 
 <details>
 <summary><b>Build on Windows</b></summary>

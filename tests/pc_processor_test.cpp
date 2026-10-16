@@ -43,16 +43,16 @@ int main() {
     char* selectCymatic[] = {name, style, cymatic};
     require(app::parseOptions(3, selectCymatic, options, error) && options.initialStyle == 11,
             "Cymatic style selection failed");
-    char invalidStyle[] = "12";
+    char invalidStyle[] = "13";
     char* rejectStyle[] = {name, style, invalidStyle};
     require(!app::parseOptions(3, rejectStyle, options, error),
             "Out-of-range style was accepted");
     char mode[] = "--mode";
-    char deskBoard[] = "7";
+    char deskBoard[] = "5";
     char* selectDeskBoard[] = {name, mode, deskBoard};
-    require(app::parseOptions(3, selectDeskBoard, options, error) && options.initialMode == 7,
+    require(app::parseOptions(3, selectDeskBoard, options, error) && options.initialMode == 5,
             "Desk Board mode selection failed");
-    char invalidMode[] = "8";
+    char invalidMode[] = "6";
     char* rejectMode[] = {name, mode, invalidMode};
     require(!app::parseOptions(3, rejectMode, options, error),
             "Out-of-range mode was accepted");

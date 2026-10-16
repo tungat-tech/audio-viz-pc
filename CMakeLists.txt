@@ -9,6 +9,12 @@ endif()
 option(BUILD_SIMULATOR "Build the LVGL/SDL application" ON)
 option(BUILD_PORTABLE_DEMO "Build the simulator without live capture (use --demo)" OFF)
 
+set(AUDIOVIZ_UI_CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs/audioviz-ui"
+    CACHE PATH "Path to the AudioViz UI Core source")
+if(NOT EXISTS "${AUDIOVIZ_UI_CORE_DIR}/ui/VisualizerUi.hpp")
+    message(FATAL_ERROR "The in-tree AudioViz UI Core source is missing")
+endif()
+
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
@@ -83,6 +89,8 @@ FetchContent_Declare(lvgl
 FetchContent_MakeAvailable(lvgl)
 target_compile_definitions(lvgl PUBLIC LV_CONF_INCLUDE_SIMPLE)
 target_include_directories(lvgl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/config)
+add_subdirectory("${AUDIOVIZ_UI_CORE_DIR}"
+    "${CMAKE_BINARY_DIR}/audioviz-ui-core")
 if(TARGET lvgl_examples)
     set_target_properties(lvgl_examples PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
@@ -115,17 +123,9 @@ add_library(simulator STATIC simulator/Simulator.cpp)
 target_include_directories(simulator PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(simulator PUBLIC lvgl SDL2::SDL2-static)
 
-add_library(visualizer_ui STATIC
-    ui/lv_font_montserrat_vietnamese_12.c
-    ui/lv_font_montserrat_vietnamese_14.c
-    ui/VisualizerUi.cpp
-    ui/UtilityModes.cpp)
-target_include_directories(visualizer_ui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(visualizer_ui PUBLIC lvgl audio_dsp)
-
 if(BUILD_TESTING)
     add_executable(vietnamese_font_test tests/vietnamese_font_test.cpp)
-    target_link_libraries(vietnamese_font_test PRIVATE visualizer_ui)
+    target_link_libraries(vietnamese_font_test PRIVATE AudioViz::UiCore)
     add_test(NAME vietnamese_font_test COMMAND vietnamese_font_test)
 endif()
 
@@ -147,7 +147,7 @@ else()
     add_executable(AudioViz_PC main.cpp)
 endif()
 target_link_libraries(AudioViz_PC PRIVATE
-    audio_capture utility_data visualizer_ui simulator)
+    audio_capture utility_data AudioViz::UiCore simulator)
 if(MINGW)
     # Ship one viewer executable instead of depending on MinGW runtime DLLs.
     target_link_options(AudioViz_PC PRIVATE -static -static-libgcc -static-libstdc++)
@@ -157,7 +157,7 @@ if(BUILD_TESTING AND BUILD_PORTABLE_DEMO)
     add_executable(audio_capture_demo_test tests/audio_capture_demo_test.cpp)
     target_link_libraries(audio_capture_demo_test PRIVATE audio_capture)
     add_test(NAME audio_capture_demo_test COMMAND audio_capture_demo_test)
-    foreach(mode RANGE 1 7)
+    foreach(mode RANGE 1 5)
         add_test(NAME gui_demo_mode_${mode}
             COMMAND AudioViz_PC --demo --mode ${mode} --frames 6
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/gui-demo-mode-${mode}.bmp)
@@ -167,7 +167,7 @@ if(BUILD_TESTING AND BUILD_PORTABLE_DEMO)
         COMMAND AudioViz_PC --demo --mode 1 --style 6 --frames 60
             --screenshot ${CMAKE_CURRENT_BINARY_DIR}/gui-demo-halo.bmp)
     set_tests_properties(gui_demo_halo PROPERTIES ENVIRONMENT "SDL_VIDEODRIVER=dummy")
-    foreach(style RANGE 7 11)
+    foreach(style RANGE 7 12)
         add_test(NAME gui_demo_style_${style}
             COMMAND AudioViz_PC --demo --mode 1 --style ${style} --frames 90
                 --screenshot ${CMAKE_CURRENT_BINARY_DIR}/gui-demo-style-${style}.bmp)
